@@ -1,0 +1,1361 @@
+<!DOCTYPE html>
+<html lang="es-ES"> <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema POS</title> <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf.plugin.autotable.min.js"></script>
+    <style>
+        /* Estilos (sin cambios respecto a versión anterior) */
+        body { font-family: 'Inter', sans-serif; }
+        .section { display: none; }
+        .section.active { display: block; }
+        button, input[type="button"], input[type="submit"] { transition: background-color 0.3s ease, transform 0.1s ease; }
+        button:active, input[type="button"]:active, input[type="submit"]:active { transform: scale(0.98); }
+        th, td { padding: 8px 12px; border: 1px solid #e2e8f0; text-align: left; }
+        th { background-color: #f1f5f9; }
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; overflow: auto; background-color: rgba(0,0,0,0.5); align-items: center; justify-content: center; }
+        .modal.align-top { align-items: flex-start; padding-top: 5%; }
+        .modal-content { background-color: #fff; margin: auto; padding: 20px; border: 1px solid #888; width: 80%; max-width: 700px; /* Ampliado para filtros */ border-radius: 8px; position: relative; }
+        .close-button { color: #aaa; position: absolute; top: 10px; right: 15px; font-size: 28px; font-weight: bold; cursor: pointer; }
+        .close-button:hover, .close-button:focus { color: black; text-decoration: none; }
+        @media (max-width: 768px) { /* Ajustado breakpoint */ .modal-content { width: 95%; } }
+        @media (max-width: 640px) { th, td { padding: 6px 8px; font-size: 0.875rem; } button, input, select { font-size: 0.875rem; } h1 { font-size: 1.5rem; } h2 { font-size: 1.25rem; } }
+        #cashStatusIndicator { padding: 0.5rem 1rem; border-radius: 0.5rem; font-weight: 600; text-align: center; min-height: 2.1em; /* Añadir altura mínima para evitar salto */}
+        #cashStatusIndicator.open { background-color: #dcfce7; color: #166534; border: 1px solid #86efac; }
+        #cashStatusIndicator.closed { background-color: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
+        button:disabled { opacity: 0.6; cursor: not-allowed; background-color: #9ca3af; }
+        button:disabled:hover { background-color: #9ca3af; }
+        .date-filter-controls { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: center; margin-bottom: 1rem; padding: 0.75rem; background-color: #f9fafb; border-radius: 0.5rem; border: 1px solid #e5e7eb; }
+        .date-filter-controls label { font-size: 0.875rem; font-weight: 500; }
+        .date-filter-controls input[type="date"] { padding: 0.3rem 0.5rem; border: 1px solid #d1d5db; border-radius: 0.375rem; font-size: 0.875rem; }
+        .date-filter-controls button { padding: 0.4rem 0.8rem; font-size: 0.875rem; }
+        /* Estilos para iconos SVG inline */
+        .icon-button svg { display: inline-block; vertical-align: middle; width: 1.1em; height: 1.1em; }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <div id="posContainer" class="container mx-auto p-4 max-w-4xl">
+         <header class="bg-blue-600 text-white p-4 rounded-lg shadow-md mb-6 relative">
+            <h1 class="text-2xl font-bold text-center">Sistema de Punto de Venta (POS)</h1> <p id="storeNameHeader" class="text-center text-sm"></p>
+            <div id="cashStatusIndicator" class="mt-2 mx-auto w-fit text-sm"></div>
+         </header>
+
+        <nav class="mb-6 bg-white p-3 rounded-lg shadow-sm">
+             <ul class="flex flex-wrap justify-center gap-2">
+                <li><button data-section="venta" class="nav-button bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg shadow focus:outline-none focus:ring-2 focus:ring-green-400 focus:ring-opacity-75">Venta</button></li> <li><button data-section="inventario" class="nav-button bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg shadow focus:outline-none focus:ring-2 focus:ring-blue-400 focus:ring-opacity-75">Inventario</button></li> <li><button data-section="clientes" class="nav-button bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded-lg shadow focus:outline-none focus:ring-2 focus:ring-yellow-400 focus:ring-opacity-75">Clientes</button></li> <li><button data-section="historial" class="nav-button bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 px-4 rounded-lg shadow focus:outline-none focus:ring-2 focus:ring-purple-400 focus:ring-opacity-75">Historial</button></li> <li><button data-section="caja" class="nav-button bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg shadow focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-opacity-75">Caja</button></li> <li><button data-section="configuracion" class="nav-button bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg shadow focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-opacity-75">Configuración</button></li> </ul>
+        </nav>
+
+        <main class="bg-white p-6 rounded-lg shadow-md">
+             <section id="venta" class="section active">
+                <h2 class="text-xl font-semibold mb-4 border-b pb-2">Nueva Venta</h2> <div class="mb-4 flex flex-wrap gap-2 items-center">
+                    <label for="productSearch" class="block text-sm font-medium text-gray-700">Buscar Producto (Nombre o Código):</label> <input type="text" id="productSearch" list="productList" class="mt-1 block w-full md:w-1/2 border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                    <datalist id="productList"></datalist>
+                    <button id="addProductManualButton" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-3 rounded-lg shadow">Agregar</button> </div>
+                <h3 class="text-lg font-medium mb-2">Carrito</h3> <div class="overflow-x-auto mb-4">
+                    <table class="min-w-full border-collapse border border-gray-300">
+                         <thead class="bg-gray-100">
+                            <tr id="cartHeaders">
+                                <th class="border border-gray-300 px-4 py-2">Producto</th> <th class="border border-gray-300 px-4 py-2">Cant.</th> <th class="border border-gray-300 px-4 py-2">Precio Unit. (<span class="currency-symbol">$</span>)</th> <th class="border border-gray-300 px-4 py-2">Subtotal (<span class="currency-symbol">$</span>)</th> <th class="border border-gray-300 px-4 py-2">Acción</th> </tr>
+                        </thead>
+                         <tbody id="cartItems"></tbody>
+                    </table>
+                </div>
+                <div class="text-right font-bold text-xl mb-4">
+                    Total: <span class="currency-symbol">$</span><span id="cartTotal">0.00</span> </div>
+                <div class="flex flex-wrap justify-end gap-4">
+                    <div class="flex items-center gap-2">
+                        <label for="customerSelectSale" class="block text-sm font-medium text-gray-700">Cliente (Fiado):</label> <select id="customerSelectSale" class="border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                             <option value="">Seleccionar Cliente (Opcional)</option> </select>
+                    </div>
+                    <button id="completeSaleCash" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg shadow">Cobrar (Efectivo)</button> <button id="completeSaleCredit" class="bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-4 rounded-lg shadow">Fiar (Crédito)</button> <button id="cancelSale" class="bg-gray-400 hover:bg-gray-500 text-white font-bold py-2 px-4 rounded-lg shadow">Cancelar Venta</button> </div>
+                <p id="saleBlockedMessage" class="text-red-600 text-center mt-4 font-semibold hidden">La caja está cerrada. No es posible realizar ventas.</p> </section>
+
+            <section id="inventario" class="section">
+                <h2 class="text-xl font-semibold mb-4 border-b pb-2">Gestión de Inventario</h2> <button id="openAddProductModal" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg shadow mb-4">Agregar Nuevo Producto</button> <div class="mb-4">
+                    <input type="text" id="inventoryFilter" placeholder="Buscar producto por nombre o código..." class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"> </div>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full border-collapse border border-gray-300">
+                         <thead class="bg-gray-100">
+                            <tr id="inventoryHeaders">
+                                <th class="border border-gray-300 px-4 py-2">Código</th> <th class="border border-gray-300 px-4 py-2">Nombre</th> <th class="border border-gray-300 px-4 py-2">Costo (<span class="currency-symbol">$</span>)</th> <th class="border border-gray-300 px-4 py-2">Precio Venta (<span class="currency-symbol">$</span>)</th> <th class="border border-gray-300 px-4 py-2">Stock</th> <th class="border border-gray-300 px-4 py-2">Acciones</th> </tr>
+                        </thead>
+                         <tbody id="inventoryTableBody"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section id="clientes" class="section">
+                <h2 class="text-xl font-semibold mb-4 border-b pb-2">Gestión de Clientes</h2> <button id="openAddCustomerModal" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded-lg shadow mb-4">Agregar Nuevo Cliente</button> <div class="mb-4">
+                    <input type="text" id="customerFilter" placeholder="Buscar cliente por nombre..." class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"> </div>
+                <div class="overflow-x-auto">
+                    <table class="min-w-full border-collapse border border-gray-300">
+                        <thead class="bg-gray-100">
+                             <tr id="customerHeaders">
+                                <th class="border border-gray-300 px-4 py-2">Nombre</th> <th class="border border-gray-300 px-4 py-2">Teléfono</th> <th class="border border-gray-300 px-4 py-2">Dirección</th> <th class="border border-gray-300 px-4 py-2">Saldo Deudor (<span class="currency-symbol">$</span>)</th> <th class="border border-gray-300 px-4 py-2">Acciones</th> </tr>
+                         </thead>
+                        <tbody id="customerTableBody"></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section id="historial" class="section">
+                <h2 class="text-xl font-semibold mb-4 border-b pb-2">Historial</h2> <div class="mb-4 flex flex-wrap gap-2">
+                    <button id="viewSalesHistory" class="bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 px-4 rounded-lg shadow">Ventas</button> <button id="viewCashHistory" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg shadow">Movimientos de Caja</button> </div>
+                 <div id="historyDisplayArea">
+                     <div id="historyContent" class="overflow-x-auto mt-4">
+                     </div>
+                </div>
+            </section>
+
+             <section id="caja" class="section">
+                <h2 class="text-xl font-semibold mb-4 border-b pb-2">Gestión de Caja</h2> <div class="mb-6 flex flex-wrap justify-center gap-4">
+                    <button id="openCashRegisterButton" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg shadow">Abrir Caja</button> <button id="closeCashRegisterButton" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg shadow">Cerrar Caja</button> </div>
+                <div class="mb-4 p-4 bg-blue-100 rounded-lg shadow">
+                    <p class="text-lg font-medium">Saldo Actual Estimado en Caja: <span class="currency-symbol">$</span><span id="cashBalance">0.00</span></p> <p id="cashOpenInfo" class="text-sm text-gray-600 mt-1"></p>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                    <div>
+                        <label for="cashAmount" class="block text-sm font-medium text-gray-700">Monto (<span class="currency-symbol">$</span>)</label> <input type="number" id="cashAmount" step="0.01" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="0.00">
+                    </div>
+                    <div>
+                        <label for="cashDescription" class="block text-sm font-medium text-gray-700">Descripción</label> <input type="text" id="cashDescription" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="Ej: Pago proveedor"> </div>
+                </div>
+                <div class="flex flex-wrap gap-4">
+                     <button id="addCashIn" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg shadow">Registrar Entrada</button> <button id="addCashOut" class="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg shadow">Registrar Salida</button> <button id="generateCashReportPDF" class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg shadow">PDF Caja (Sesión Actual)</button> </div>
+                <div id="cashMovementsHistory" class="mt-6">
+                     <h3 class="text-lg font-medium mb-2">Movimientos (Sesión Actual)</h3> <div class="date-filter-controls" id="cashDateFilterControls">
+                         <label for="cashFilterStartDate">Desde:</label> <input type="date" id="cashFilterStartDate">
+                         <label for="cashFilterEndDate">Hasta:</label> <input type="date" id="cashFilterEndDate">
+                         <button id="filterCashButton" class="bg-blue-500 hover:bg-blue-600 text-white rounded-lg shadow">Filtrar</button> <button id="clearCashFilterButton" class="bg-gray-400 hover:bg-gray-500 text-white rounded-lg shadow">Mostrar Todos</button> </div>
+                     <div class="overflow-x-auto mt-2">
+                        <table class="min-w-full border-collapse border border-gray-300">
+                             <thead class="bg-gray-100">
+                                <tr id="cashMovementsHeaders">
+                                    <th class="border border-gray-300 px-4 py-2">Fecha</th> <th class="border border-gray-300 px-4 py-2">Tipo</th> <th class="border border-gray-300 px-4 py-2">Monto (<span class="currency-symbol">$</span>)</th> <th class="border border-gray-300 px-4 py-2">Descripción</th> </tr>
+                            </thead>
+                            <tbody id="cashMovementsTableBody"></tbody>
+                        </table>
+                     </div>
+                </div>
+            </section>
+
+            <section id="configuracion" class="section">
+                <h2 class="text-xl font-semibold mb-4 border-b pb-2">Configuración General</h2> <div class="mb-4">
+                     <label for="storeName" class="block text-sm font-medium text-gray-700">Nombre del Comercio</label> <input type="text" id="storeName" class="mt-1 block w-full md:w-1/2 border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="Mi Tienda"> </div>
+                <div class="mb-6">
+                     <label for="currencySymbol" class="block text-sm font-medium text-gray-700">Símbolo de Moneda</label> <input type="text" id="currencySymbol" class="mt-1 block w-1/4 border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="$"> </div>
+                <button id="saveSettings" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg shadow mb-6">Guardar Configuración</button> <h3 class="text-lg font-medium mb-2 mt-8 pt-6 border-t">Gestión de Datos</h3> <div class="flex flex-wrap gap-4">
+                    <button id="exportData" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg shadow">Exportar Datos (JSON)</button> <div>
+                         <label for="importFile" class="block text-sm font-medium text-gray-700 mb-1">Importar Datos (JSON)</label> <input type="file" id="importFile" accept=".json" class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100">
+                        <button id="importData" class="mt-2 bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg shadow">Importar</button> </div>
+                    <button id="clearData" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg shadow">Borrar TODOS los Datos</button> </div>
+                <p class="mt-4 text-sm text-red-600">Aviso: La importación y eliminación de datos son acciones irreversibles. Asegúrese de tener una copia de seguridad.</p> </section>
+        </main>
+
+        <footer class="mt-8 text-center text-sm text-gray-500">
+            Sistema POS v1.41 - Creado con HTML, TailwindCSS y JavaScript </footer>
+    </div>
+
+    <div id="productModal" class="modal align-top">
+        <div class="modal-content">
+            <span class="close-button" onclick="closeModal('productModal')">&times;</span>
+             <h3 id="productModalTitle" class="text-lg font-medium mb-4">Agregar Producto</h3> <form id="productForm">
+                <input type="hidden" id="productId">
+                <div class="mb-3"><label for="productCode" class="block text-sm font-medium text-gray-700">Código</label><input type="text" id="productCode" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"></div> <div class="mb-3"><label for="productName" class="block text-sm font-medium text-gray-700">Nombre</label><input type="text" id="productName" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"></div> <div class="mb-3"><label for="productCostPrice" class="block text-sm font-medium text-gray-700">Precio de Costo (<span class="currency-symbol">$</span>)</label><input type="number" id="productCostPrice" step="0.01" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="0.00"></div> <div class="mb-3"><label for="productPrice" class="block text-sm font-medium text-gray-700">Precio de Venta (<span class="currency-symbol">$</span>)</label><input type="number" id="productPrice" step="0.01" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="0.00"></div> <div class="mb-4"><label for="productStock" class="block text-sm font-medium text-gray-700">Stock Inicial</label><input type="number" id="productStock" step="1" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm" placeholder="0"></div> <div class="flex justify-end gap-2">
+                    <button type="button" onclick="closeModal('productModal')" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg shadow">Cancelar</button> <button type="submit" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg shadow">Guardar Producto</button> </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="customerModal" class="modal align-top">
+        <div class="modal-content">
+            <span class="close-button" onclick="closeModal('customerModal')">&times;</span>
+            <h3 id="customerModalTitle" class="text-lg font-medium mb-4">Agregar Cliente</h3> <form id="customerForm">
+                <input type="hidden" id="customerId">
+                <div class="mb-3"><label for="customerName" class="block text-sm font-medium text-gray-700">Nombre</label><input type="text" id="customerName" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"></div> <div class="mb-3"><label for="customerPhone" class="block text-sm font-medium text-gray-700">Teléfono</label><input type="tel" id="customerPhone" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"></div> <div class="mb-4"><label for="customerAddress" class="block text-sm font-medium text-gray-700">Dirección</label><textarea id="customerAddress" rows="2" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"></textarea></div> <input type="hidden" id="customerBalance" value="0">
+                <input type="hidden" id="customerDebtDetails" value="[]">
+                 <div class="flex justify-end gap-2">
+                    <button type="button" onclick="closeModal('customerModal')" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg shadow">Cancelar</button> <button type="submit" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-4 rounded-lg shadow">Guardar Cliente</button> </div>
+             </form>
+        </div>
+    </div>
+
+    <div id="paymentModal" class="modal align-top">
+        <div class="modal-content">
+            <span class="close-button" onclick="closeModal('paymentModal')">&times;</span>
+            <h3 class="text-lg font-medium mb-4">Realizar Pago de Cliente</h3> <form id="paymentForm">
+                <input type="hidden" id="paymentCustomerId">
+                 <p class="mb-2">Cliente: <strong id="paymentCustomerName"></strong></p> <p class="mb-4">Saldo Actual: <span class="currency-symbol">$</span><strong id="paymentCustomerBalance"></strong></p> <div class="mb-3"><label for="paymentAmount" class="block text-sm font-medium text-gray-700">Monto del Pago (<span class="currency-symbol">$</span>)</label><input type="number" id="paymentAmount" step="0.01" required class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"></div> <div class="mb-4"><label for="paymentDescription" class="block text-sm font-medium text-gray-700">Descripción (Opcional)</label><input type="text" id="paymentDescription" placeholder="Ej: Pago de la cuenta" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"></div> <div class="flex justify-end gap-2">
+                    <button type="button" onclick="closeModal('paymentModal')" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg shadow">Cancelar</button> <button type="submit" class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-lg shadow">Registrar Pago</button> </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="debtDetailsModal" class="modal align-top">
+        <div class="modal-content" style="max-width: 800px;"> <span class="close-button" onclick="closeModal('debtDetailsModal')">&times;</span>
+            <h3 class="text-lg font-medium mb-4">Extracto de Cuenta - <span id="debtDetailCustomerName"></span></h3> <p class="mb-2">Saldo Deudor Actual Total: <span class="currency-symbol">$</span><strong id="debtDetailCustomerBalance"></strong></p> <div class="date-filter-controls" id="debtDetailsDateFilterControls">
+                 <label for="debtDetailsStartDate">Desde:</label> <input type="date" id="debtDetailsStartDate">
+                 <label for="debtDetailsEndDate">Hasta:</label> <input type="date" id="debtDetailsEndDate">
+                 <button id="filterDebtDetailsButton" class="bg-blue-500 hover:bg-blue-600 text-white rounded-lg shadow">Filtrar</button> <button id="clearDebtDetailsFilterButton" class="bg-gray-400 hover:bg-gray-500 text-white rounded-lg shadow">Mostrar Todo</button> </div>
+
+            <div class="overflow-x-auto max-h-96 mt-2">
+                <table class="min-w-full border-collapse border border-gray-300">
+                    <thead class="bg-gray-100 sticky top-0" id="debtDetailsHeaders">
+                        <tr>
+                             <th class="border border-gray-300 px-4 py-2">Fecha / Hora</th> <th class="border border-gray-300 px-4 py-2">Tipo</th> <th class="border border-gray-300 px-4 py-2">Descripción</th> <th class="border border-gray-300 px-4 py-2 text-right">Monto (<span class="currency-symbol">$</span>)</th> </tr>
+                    </thead>
+                     <tbody id="debtDetailsTableBody">
+                        </tbody>
+                </table>
+                 <p id="debtDetailsMessage" class="text-center py-4 text-gray-500 hidden">No se encontraron transacciones.</p> </div>
+            <div class="flex justify-end gap-2 mt-4">
+                <button id="generateCustomerStatementPDFButton" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg shadow">Generar PDF (Filtrado)</button> <button type="button" onclick="closeModal('debtDetailsModal')" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg shadow">Cerrar</button> </div>
+        </div>
+    </div>
+    <div id="messageModal" class="modal">
+        <div class="modal-content">
+            <span class="close-button" onclick="closeModal('messageModal')">&times;</span>
+            <h3 id="messageModalTitle" class="text-lg font-medium mb-4">Mensaje</h3> <p id="messageModalText" class="mb-4"></p>
+            <div class="flex justify-end">
+                 <button type="button" onclick="closeModal('messageModal')" class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-lg shadow">OK</button> </div>
+        </div>
+    </div>
+
+    <div id="openCashModal" class="modal">
+        <div class="modal-content">
+            <span class="close-button" onclick="closeModal('openCashModal')">&times;</span>
+            <h3 class="text-lg font-medium mb-4">Abrir Caja</h3> <form id="openCashForm">
+                <div class="mb-4"><label for="initialCashAmount" class="block text-sm font-medium text-gray-700">Monto Inicial (<span class="currency-symbol">$</span>)</label><input type="number" id="initialCashAmount" step="0.01" required placeholder="0.00" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"></div> <div class="flex justify-end gap-2">
+                    <button type="button" onclick="closeModal('openCashModal')" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg shadow">Cancelar</button> <button type="submit" class="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg shadow">Abrir Caja</button> </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="closeCashModal" class="modal align-top">
+        <div class="modal-content">
+            <span class="close-button" onclick="closeModal('closeCashModal')">&times;</span>
+             <h3 class="text-lg font-medium mb-4">Resumen de Cierre de Caja</h3> <div id="closeCashSummary" class="mb-4 p-4 bg-gray-50 rounded border border-gray-200">
+                <p>Fecha Apertura: <strong id="summaryOpenTime"></strong></p> <p>Monto Inicial: <strong id="summaryInitialAmount"></strong></p> <hr class="my-2">
+                 <p>Ventas en Efectivo: <strong id="summaryCashSales"></strong></p> <p>Otras Entradas (Manuales): <strong id="summaryCashIn"></strong></p> <p>Salidas (Manuales): <strong id="summaryCashOut"></strong></p> <p>Ganancia (Ventas Efectivo): <strong id="summaryProfit"></strong></p> <hr class="my-2">
+                <p class="text-base font-semibold">Saldo Esperado en Caja: <strong id="summaryExpectedBalance"></strong></p> </div>
+            <div class="mb-4">
+                <label for="finalCashAmount" class="block text-sm font-medium text-gray-700">Monto Final Contado (<span class="currency-symbol">$</span>)</label> <input type="number" id="finalCashAmount" step="0.01" placeholder="0.00" class="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm">
+                <p id="cashDifference" class="text-sm mt-1"></p>
+             </div>
+            <div class="flex justify-end gap-2">
+                <button type="button" onclick="closeModal('closeCashModal')" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-lg shadow">Cancelar</button> <button id="confirmCloseCashButton" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg shadow">Confirmar Cierre de Caja</button> </div>
+        </div>
+    </div>
+
+
+     <script>
+        // --- Inicialización y Variables Globales ---
+        const { jsPDF } = window.jspdf;
+        let db;
+        let currentCart = [];
+        let storeConfig = { storeName: 'Mi Tienda', currencySymbol: '$', cashIsOpen: false, cashInitialAmount: 0, cashOpenTimestamp: null, cashCloseTimestamp: null };
+        let currentCustomerTransactions = [];
+        let currentViewingCustomerId = null;
+        // --- Configuración de IndexedDB ---
+        const DB_NAME = 'POSDatabase';
+        const DB_VERSION = 3;
+        const STORES = { PRODUCTS: 'products', CUSTOMERS: 'customers', SALES: 'sales', CASH_MOVEMENTS: 'cashMovements', CONFIG: 'config' };
+        // --- initDB ---
+        function initDB() {
+             return new Promise(async (resolve, reject) => {
+                console.log(`Intentando abrir BD ${DB_NAME} versión ${DB_VERSION}`);
+                const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+                request.onerror = (event) => { console.error("Error BD:", event.target.error || event); showMessage("Error", "No se pudo abrir la base de datos local."); reject("Error BD"); };
+                request.onsuccess = (event) => { db = event.target.result; console.log("BD abierto."); loadConfig().then(() => { updateCashUI(); resolve(db); }).catch(reject); };
+                request.onupgradeneeded = (event) => {
+                    console.log("Actualizando BD..."); db = event.target.result; const tx = event.target.transaction; const oldVer = event.oldVersion; console.log(`Old: ${oldVer}, New: ${DB_VERSION}`);
+                    if (oldVer < 1) { if (!db.objectStoreNames.contains(STORES.PRODUCTS)) { const ps = db.createObjectStore(STORES.PRODUCTS, { keyPath: 'id', autoIncrement: true }); ps.createIndex('code', 'code', { unique: true }); ps.createIndex('name', 'name', { unique: false }); } if (!db.objectStoreNames.contains(STORES.CUSTOMERS)) { db.createObjectStore(STORES.CUSTOMERS, { keyPath: 'id', autoIncrement: true }).createIndex('name', 'name', { unique: false }); } if (!db.objectStoreNames.contains(STORES.SALES)) { const ss = db.createObjectStore(STORES.SALES, { keyPath: 'id', autoIncrement: true }); ss.createIndex('timestamp', 'timestamp', { unique: false }); ss.createIndex('customerId', 'customerId', { unique: false }); } if (!db.objectStoreNames.contains(STORES.CASH_MOVEMENTS)) { const cs = db.createObjectStore(STORES.CASH_MOVEMENTS, { keyPath: 'id', autoIncrement: true }); cs.createIndex('timestamp', 'timestamp', { unique: false }); cs.createIndex('type', 'type', { unique: false }); } if (!db.objectStoreNames.contains(STORES.CONFIG)) { const cfgStore = db.createObjectStore(STORES.CONFIG, { keyPath: 'id' }); const initCfg = { id: 'storeSettings', storeName: 'Mi Tienda', currencySymbol: '$', cashIsOpen: false, cashInitialAmount: 0, cashOpenTimestamp: null, cashCloseTimestamp: null }; tx.objectStore(STORES.CONFIG).put(initCfg); } }
+                     if (oldVer < 2) {
+                         if (!db.objectStoreNames.contains(STORES.CONFIG)) {
+                             const cfgStore = db.createObjectStore(STORES.CONFIG, { keyPath: 'id' }); const initCfg = { id: 'storeSettings', storeName: 'Mi Tienda', currencySymbol: '$', cashIsOpen: false, cashInitialAmount: 0, cashOpenTimestamp: null, cashCloseTimestamp: null }; cfgStore.put(initCfg);
+                         } else {
+                             const configStore = tx.objectStore(STORES.CONFIG); configStore.get('storeSettings').onsuccess = (e) => {
+                                 const currentSettings = e.target.result || {};
+                                 const updatedSettings = { ...currentSettings, id: 'storeSettings', cashIsOpen: currentSettings.cashIsOpen || false, cashInitialAmount: currentSettings.cashInitialAmount || 0, cashOpenTimestamp: currentSettings.cashOpenTimestamp || null, cashCloseTimestamp: currentSettings.cashCloseTimestamp || null };
+                                 configStore.put(updatedSettings);
+                             };
+                         }
+                    }
+                    console.log("Actualización BD completa (v3).");
+                 };
+            });
+        }
+
+        // --- Funciones CRUD Genéricas para IndexedDB ---
+        function performDBAction(storeName, mode, action) {
+            return new Promise((resolve, reject) => {
+                if (!db) { console.error("BD no inicializado."); return reject("BD no inicializado"); }
+                try {
+                     const transaction = db.transaction([storeName], mode);
+                    const store = transaction.objectStore(storeName);
+                    action(store, resolve, reject);
+                    transaction.oncomplete = () => {};
+                     transaction.onerror = (event) => { console.error(`Error tx ${mode} ${storeName}:`, event.target.error); reject(event.target.error); };
+                } catch (error) { console.error(`Error start tx ${mode} ${storeName}:`, error); reject(error); }
+            });
+         }
+        function addItem(storeName, item) {
+            return performDBAction(storeName, 'readwrite', (store, resolve, reject) => { const request = store.add(item); request.onsuccess = (event) => resolve(event.target.result); request.onerror = (event) => reject(event.target.error); });
+         }
+        function getAllItems(storeName) {
+            return performDBAction(storeName, 'readonly', (store, resolve, reject) => {
+                const request = store.getAll();
+                request.onsuccess = (event) => { resolve(event.target.result); };
+                request.onerror = (event) => reject(event.target.error);
+            });
+         }
+        function getItemById(storeName, id) {
+            const numericId = typeof id === 'string' && storeName !== STORES.CONFIG ? parseInt(id, 10) : id;
+            if (storeName !== STORES.CONFIG && isNaN(numericId)) {
+                 if (storeName === STORES.CONFIG && typeof id === 'string') {}
+                 else { return Promise.reject(`ID inválido para ${storeName}: ${id}`); }
+            }
+            return performDBAction(storeName, 'readonly', (store, resolve, reject) => {
+                const keyToGet = storeName === STORES.CONFIG ? id : numericId;
+                const request = store.get(keyToGet);
+                request.onsuccess = (event) => resolve(event.target.result);
+                 request.onerror = (event) => reject(event.target.error);
+            });
+         }
+        function updateItem(storeName, item) {
+             return performDBAction(storeName, 'readwrite', (store, resolve, reject) => {
+                 const request = store.put(item);
+                 request.onsuccess = (event) => resolve(event.target.result);
+                 request.onerror = (event) => reject(event.target.error);
+              });
+        }
+        function deleteItem(storeName, id) {
+            const numericId = typeof id === 'string' ? parseInt(id, 10) : id;
+             if (isNaN(numericId)) { return Promise.reject(`ID inválido para eliminar en ${storeName}: ${id}`); }
+            return performDBAction(storeName, 'readwrite', (store, resolve, reject) => {
+                const request = store.delete(numericId);
+                request.onsuccess = () => resolve();
+                request.onerror = (event) => reject(event.target.error);
+            });
+         }
+        function getItemByIndex(storeName, indexName, value) {
+             return performDBAction(storeName, 'readonly', (store, resolve, reject) => {
+                 const index = store.index(indexName);
+                 const request = index.get(value);
+                 request.onsuccess = (event) => resolve(event.target.result);
+                 request.onerror = (event) => reject(event.target.error);
+             });
+         }
+        function getAllItemsByIndex(storeName, indexName, value) {
+             return performDBAction(storeName, 'readonly', (store, resolve, reject) => {
+                 const index = store.index(indexName);
+                 const request = index.getAll(value);
+                 request.onsuccess = (event) => resolve(event.target.result);
+                 request.onerror = (event) => reject(event.target.error);
+             });
+         }
+
+        // --- Funciones de Configuración ---
+        async function saveConfig(showMsg = true) {
+            if (document.getElementById('configuracion').classList.contains('active')) {
+                 storeConfig.storeName = document.getElementById('storeName').value || 'Mi Tienda';
+                 storeConfig.currencySymbol = document.getElementById('currencySymbol').value || '$';
+            }
+             storeConfig.cashIsOpen = storeConfig.cashIsOpen || false;
+             storeConfig.cashInitialAmount = storeConfig.cashInitialAmount || 0;
+             storeConfig.cashOpenTimestamp = storeConfig.cashOpenTimestamp || null;
+             storeConfig.cashCloseTimestamp = storeConfig.cashCloseTimestamp || null;
+             try {
+                await updateItem(STORES.CONFIG, { id: 'storeSettings', ...storeConfig });
+                 updateUIConfig();
+                updateCashUI();
+                if (showMsg) {
+                    showMessage("Éxito", "Configuración guardada con éxito.");
+                 }
+            } catch (error) {
+                console.error("Error al guardar config:", error);
+                 if (showMsg) {
+                    showMessage("Error", "No se pudo guardar la configuración.");
+                 }
+            }
+        }
+        async function loadConfig() {
+            try {
+                const savedConfig = await getItemById(STORES.CONFIG, 'storeSettings');
+                 const defaultConfig = { storeName: 'Mi Tienda', currencySymbol: '$', cashIsOpen: false, cashInitialAmount: 0, cashOpenTimestamp: null, cashCloseTimestamp: null };
+                 if (savedConfig) {
+                    storeConfig = { ...defaultConfig, ...savedConfig };
+                     delete storeConfig.currentLanguage;
+                } else {
+                    storeConfig = defaultConfig;
+                     await addItem(STORES.CONFIG, { id: 'storeSettings', ...storeConfig });
+                }
+                updateUIConfig();
+             } catch (error) {
+                console.error("Error al cargar config:", error);
+                 updateUIConfig();
+            }
+        }
+        function updateUIConfig() {
+            document.getElementById('storeName').value = storeConfig.storeName;
+             document.getElementById('currencySymbol').value = storeConfig.currencySymbol;
+            document.getElementById('storeNameHeader').textContent = storeConfig.storeName;
+            document.querySelectorAll('.currency-symbol').forEach(el => el.textContent = storeConfig.currencySymbol);
+            if (document.getElementById('inventario').classList.contains('active')) renderInventoryTable();
+             if (document.getElementById('venta').classList.contains('active')) renderCart();
+            if (document.getElementById('clientes').classList.contains('active')) renderCustomerTable();
+            if (document.getElementById('caja').classList.contains('active')) { renderCashMovementsTable(); updateCashBalance(); }
+            document.querySelectorAll('#productModal label span.currency-symbol, #inventoryHeaders th span.currency-symbol, #cartHeaders th:nth-child(3), #cartHeaders th:nth-child(4)').forEach(el => el.textContent = storeConfig.currencySymbol);
+             document.querySelectorAll('#customerHeaders th:nth-child(4) span.currency-symbol, #paymentModal label span.currency-symbol, #paymentModal p span.currency-symbol, #debtDetailsModal p span.currency-symbol, #debtDetailsHeaders th span.currency-symbol').forEach(el => el.textContent = storeConfig.currencySymbol);
+             document.querySelectorAll('#caja label span.currency-symbol, #caja p span.currency-symbol, #cashMovementsHeaders th span.currency-symbol, #openCashModal label span.currency-symbol, #closeCashModal label span.currency-symbol, #closeCashModal p span.currency-symbol').forEach(el => el.textContent = storeConfig.currencySymbol);
+         }
+
+        // --- Funciones de Gestión de Productos (Inventario) ---
+        async function addOrUpdateProduct(event) {
+             if (event && typeof event.preventDefault === 'function') { event.preventDefault(); }
+            const productId = document.getElementById('productId').value;
+             const product = {
+                code: document.getElementById('productCode').value.trim(),
+                name: document.getElementById('productName').value.trim(),
+                costPrice: parseFloat(document.getElementById('productCostPrice').value),
+                price: parseFloat(document.getElementById('productPrice').value),
+                stock: parseInt(document.getElementById('productStock').value, 10)
+             };
+            if (!product.code || !product.name || isNaN(product.costPrice) || isNaN(product.price) || isNaN(product.stock) || product.costPrice < 0 || product.price < 0 || product.stock < 0) {
+                showMessage("Error", "Por favor, complete todos los campos correctamente (Código, Nombre, Costo, Precio Venta, Stock). Los valores deben ser no negativos.");
+                 return;
+            }
+             if (product.price < product.costPrice) {
+                if (!confirm(`Aviso: El precio de venta (${storeConfig.currencySymbol}${product.price.toFixed(2)}) es menor que el precio de costo (${storeConfig.currencySymbol}${product.costPrice.toFixed(2)}). ¿Desea continuar?`)) {
+                    return;
+                }
+            }
+
+            try {
+                const existingProduct = await getItemByIndex(STORES.PRODUCTS, 'code', product.code);
+                 if (existingProduct && (!productId || existingProduct.id !== parseInt(productId))) {
+                    showMessage("Error", `El código '${product.code}' ya está registrado.`);
+                     return;
+                }
+
+                if (productId) {
+                    product.id = parseInt(productId, 10);
+                     await updateItem(STORES.PRODUCTS, product);
+                    showMessage("Éxito", "Producto actualizado con éxito.");
+                } else {
+                    await addItem(STORES.PRODUCTS, product);
+                     showMessage("Éxito", "Producto agregado con éxito.");
+                }
+                closeModal('productModal');
+                 renderInventoryTable();
+                loadProductListForSearch();
+                document.getElementById('productForm').reset();
+            } catch (error) {
+                console.error("Error al guardar producto:", error);
+                 if (error.name === 'ConstraintError') {
+                     showMessage("Error", `El código '${product.code}' ya está registrado.`);
+                 } else {
+                    showMessage("Error", "No se pudo guardar el producto.");
+                 }
+            }
+        }
+        async function renderInventoryTable(filter = '') {
+             const tableBody = document.getElementById('inventoryTableBody');
+             tableBody.innerHTML = '';
+             try {
+                 let products = await getAllItems(STORES.PRODUCTS) || [];
+                 if (filter) {
+                     const lcf = filter.toLowerCase();
+                     products = products.filter(p => p.name.toLowerCase().includes(lcf) || p.code.toLowerCase().includes(lcf));
+                 }
+                 if (products.length === 0) {
+                     tableBody.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-gray-500">No hay productos registrados${filter ? ' que coincidan con la búsqueda' : ''}.</td></tr>`;
+                     return;
+                 }
+                 products.sort((a, b) => a.name.localeCompare(b.name));
+                 products.forEach(product => {
+                     const row = tableBody.insertRow();
+                     row.innerHTML = `
+                        <td>${product.code}</td>
+                         <td>${product.name}</td>
+                        <td class="text-right">${storeConfig.currencySymbol}${(product.costPrice || 0).toFixed(2)}</td>
+                        <td class="text-right">${storeConfig.currencySymbol}${product.price.toFixed(2)}</td>
+                        <td class="text-center">${product.stock}</td>
+                         <td class="text-center">
+                            <button onclick="editProduct(${product.id})" class="text-blue-600 hover:text-blue-800 p-1 icon-button" title="Editar">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                            </button>
+                            <button onclick="deleteProduct(${product.id})" class="text-red-600 hover:text-red-800 p-1 icon-button" title="Eliminar">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></svg>
+                            </button>
+                        </td>`;
+                 });
+             } catch (error) {
+                 console.error("Error al renderizar inventario:", error);
+                 tableBody.innerHTML = `<tr><td colspan="6" class="text-center py-4 text-red-500">Error al cargar el inventario.</td></tr>`;
+             }
+        }
+        async function editProduct(id) {
+            try {
+                const product = await getItemById(STORES.PRODUCTS, id);
+                 if (product) {
+                    document.getElementById('productId').value = product.id;
+                     document.getElementById('productCode').value = product.code;
+                    document.getElementById('productName').value = product.name;
+                    document.getElementById('productCostPrice').value = product.costPrice || 0;
+                    document.getElementById('productPrice').value = product.price;
+                     document.getElementById('productStock').value = product.stock;
+                    document.getElementById('productModalTitle').textContent = 'Editar Producto';
+                    openModal('productModal');
+                }
+            } catch (error) {
+                console.error("Error al cargar producto para edición:", error);
+                 showMessage("Error", "No se pudo cargar el producto.");
+            }
+        }
+        async function deleteProduct(id) {
+            if (confirm('¿Está seguro de que desea eliminar este producto? Esta acción no se puede deshacer.')) {
+                try {
+                    await deleteItem(STORES.PRODUCTS, id);
+                     showMessage("Éxito", "Producto eliminado con éxito.");
+                    renderInventoryTable();
+                    loadProductListForSearch();
+                } catch (error) {
+                    console.error("Error al eliminar producto:", error);
+                     showMessage("Error", "No se pudo eliminar el producto.");
+                }
+            }
+        }
+        async function loadProductListForSearch() {
+            const datalist = document.getElementById('productList');
+             datalist.innerHTML = '';
+            try {
+                const products = await getAllItems(STORES.PRODUCTS) || [];
+                 products.forEach(p => {
+                    const option = document.createElement('option');
+                    option.value = `${p.name} (${p.code})`;
+                    option.dataset.productId = p.id;
+                    datalist.appendChild(option);
+                 });
+            } catch (error) {
+                console.error("Error al cargar lista de productos:", error);
+             }
+        }
+
+        // --- Funciones de Gestión de Clientes ---
+        async function addOrUpdateCustomer(event) {
+            if (event && typeof event.preventDefault === 'function') { event.preventDefault(); }
+            const customerId = document.getElementById('customerId').value;
+             const customer = { name: document.getElementById('customerName').value.trim(), phone: document.getElementById('customerPhone').value.trim(), address: document.getElementById('customerAddress').value.trim(), };
+             if (!customer.name) { showMessage("Error", "El nombre del cliente es obligatorio."); return; }
+            try {
+                if (customerId) { customer.id = parseInt(customerId, 10); const existingCustomer = await getItemById(STORES.CUSTOMERS, customer.id); customer.creditBalance = existingCustomer.creditBalance || 0; customer.debtDetails = existingCustomer.debtDetails || []; await updateItem(STORES.CUSTOMERS, customer); showMessage("Éxito", "Cliente actualizado con éxito."); }
+                else { customer.creditBalance = 0; customer.debtDetails = []; await addItem(STORES.CUSTOMERS, customer); showMessage("Éxito", "Cliente agregado con éxito."); }
+                closeModal('customerModal'); renderCustomerTable(); loadCustomerOptions(); document.getElementById('customerForm').reset();
+             } catch (error) { console.error("Error al guardar cliente:", error); showMessage("Error", "No se pudo guardar el cliente."); }
+        }
+        async function renderCustomerTable(filter = '') {
+             const tableBody = document.getElementById('customerTableBody');
+             tableBody.innerHTML = '';
+             try {
+                 let customers = await getAllItems(STORES.CUSTOMERS) || [];
+                 if (filter) { const lcf = filter.toLowerCase(); customers = customers.filter(c => c.name.toLowerCase().includes(lcf)); }
+                 if (customers.length === 0) { tableBody.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-gray-500">No hay clientes registrados${filter ? ' que coincidan con la búsqueda' : ''}.</td></tr>`; return; }
+                 customers.sort((a, b) => a.name.localeCompare(b.name));
+                 customers.forEach(customer => {
+                     const balance = customer.creditBalance || 0;
+                     const row = tableBody.insertRow();
+                     row.innerHTML = `<td>${customer.name}</td><td>${customer.phone || '-'}</td><td>${customer.address || '-'}</td><td class="text-right ${balance > 0 ? 'text-red-600 font-semibold' : ''}">${storeConfig.currencySymbol}${balance.toFixed(2)}</td><td class="text-center whitespace-nowrap"><button onclick="openPaymentModal(${customer.id})" class="text-green-600 hover:text-green-800 p-1 icon-button ${balance <= 0 ? 'opacity-50 cursor-not-allowed' : ''}" title="Pagar" ${balance <= 0 ? 'disabled' : ''}><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" x2="12" y1="2" y2="22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></button><button onclick="openDebtDetailsModal(${customer.id})" class="text-blue-600 hover:text-blue-800 p-1 icon-button" title="Ver Extracto/Deuda"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 9.5 9.5 14"/><path d="m9.5 9.5 4.5 4.5"/><path d="M21 12v-1.5a4.5 4.5 0 0 0-4.5-4.5h-6a4.5 4.5 0 0 0-4.5 4.5v7a4.5 4.5 0 0 0 4.5 4.5h3"/><path d="M3 10.5H4.5"/><path d="M3 15H4.5"/><path d="M3 6H4.5"/></svg></button><button onclick="editCustomer(${customer.id})" class="text-yellow-600 hover:text-yellow-800 p-1 icon-button" title="Editar"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="15" r="3"/><circle cx="9" cy="7" r="4"/><path d="M10.3 15H7a4 4 0 0 0-4 4v1"/><path d="m21.7 16.4-.9-.3"/><path d="m15.2 13.9-.9-.3"/><path d="m16.6 18.7.3-.9"/><path d="m19.1 12.2.3-.9"/><path d="m19.6 18.7-.4-1"/><path d="m16.8 12.3-.4-1"/><path d="m14.3 16.6 1-.4"/><path d="m20.7 13.8 1-.4"/></svg></button><button onclick="deleteCustomer(${customer.id})" class="text-red-600 hover:text-red-800 p-1 icon-button" title="Eliminar"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="17" x2="22" y1="8" y2="13"/><line x1="22" x2="17" y1="8" y2="13"/></svg></button></td>`;
+                 });
+             } catch (error) { console.error("Error al renderizar clientes:", error); tableBody.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-red-500">Error al cargar clientes.</td></tr>`; }
+        }
+        async function editCustomer(id) {
+            try { const customer = await getItemById(STORES.CUSTOMERS, id); if (customer) { document.getElementById('customerId').value = customer.id; document.getElementById('customerName').value = customer.name; document.getElementById('customerPhone').value = customer.phone || ''; document.getElementById('customerAddress').value = customer.address || ''; document.getElementById('customerModalTitle').textContent = 'Editar Cliente'; openModal('customerModal'); } } catch (error) { console.error("Error al cargar cliente para edición:", error); showMessage("Error", "No se pudo cargar el cliente."); }
+        }
+        async function deleteCustomer(id) {
+            try { const customer = await getItemById(STORES.CUSTOMERS, id); if (customer && (customer.creditBalance || 0) > 0) { showMessage("Aviso", `Este cliente tiene un saldo deudor de ${storeConfig.currencySymbol}${(customer.creditBalance || 0).toFixed(2)}. No se puede eliminar.`); return; } if (confirm(`¿Está seguro de que desea eliminar al cliente "${customer?.name || 'ID ' + id}"? Esta acción no se puede deshacer.`)) { await deleteItem(STORES.CUSTOMERS, id); showMessage("Éxito", "Cliente eliminado con éxito."); renderCustomerTable(); loadCustomerOptions(); } } catch (error) { console.error("Error al eliminar cliente:", error); showMessage("Error", "No se pudo eliminar el cliente."); }
+        }
+        async function loadCustomerOptions() {
+            const select = document.getElementById('customerSelectSale');
+             select.innerHTML = '<option value="">Seleccionar Cliente (Opcional)</option>';
+             try { const customers = await getAllItems(STORES.CUSTOMERS) || []; customers.sort((a, b) => a.name.localeCompare(b.name)); customers.forEach(customer => { const option = document.createElement('option'); option.value = customer.id; option.textContent = `${customer.name} (Saldo: ${storeConfig.currencySymbol}${ (customer.creditBalance || 0).toFixed(2)})`; select.appendChild(option); }); } catch (error) { console.error("Error al cargar opciones de cliente:", error); }
+        }
+
+        // --- Funciones de Gestión de Ventas (Carrito y Finalización) ---
+        function addToCart(product) {
+            if (!storeConfig.cashIsOpen) {
+                showMessage("Error", "La caja está cerrada. Ábrela antes de agregar productos.");
+                 return;
+            }
+            if (!product || isNaN(product.stock) || product.stock <= 0) {
+                showMessage("Aviso", `El producto "${product?.name || 'Desconocido'}" no está disponible o no tiene stock.`);
+                 return;
+            }
+            const existingCartItem = currentCart.find(item => item.id === product.id);
+             if (existingCartItem) {
+                if (existingCartItem.quantity < product.stock) {
+                    existingCartItem.quantity++;
+                 } else {
+                    showMessage("Aviso", `No hay más stock para "${product.name}". Stock: ${product.stock}.`);
+                 }
+            } else {
+                currentCart.push({
+                    id: product.id, code: product.code, name: product.name,
+                    price: product.price, costPrice: product.costPrice || 0, quantity: 1, maxStock: product.stock
+                });
+             }
+            renderCart();
+         }
+        function updateCartQuantity(productId, change) {
+             const idx = currentCart.findIndex(item => item.id === productId);
+             if (idx > -1) { const nq = currentCart[idx].quantity + change; if (nq > 0 && nq <= currentCart[idx].maxStock) { currentCart[idx].quantity = nq; } else if (nq <= 0) { currentCart.splice(idx, 1); } else if (nq > currentCart[idx].maxStock) { showMessage("Aviso", `Stock insuficiente para "${currentCart[idx].name}". Máximo: ${currentCart[idx].maxStock}.`); } renderCart(); }
+         }
+        function removeFromCart(productId) {
+            currentCart = currentCart.filter(item => item.id !== productId);
+             renderCart();
+        }
+        function renderCart() {
+             const cartBody = document.getElementById('cartItems');
+             const cartTotalEl = document.getElementById('cartTotal'); cartBody.innerHTML = ''; let total = 0;
+             if (currentCart.length === 0) { cartBody.innerHTML = `<tr><td colspan="5" class="text-center py-4 text-gray-500">Carrito vacío.</td></tr>`; cartTotalEl.textContent = '0.00'; return; }
+             currentCart.forEach(item => { const subtotal = item.price * item.quantity; total += subtotal; const row = cartBody.insertRow(); row.innerHTML = `<td>${item.name} (${item.code})</td><td class="text-center"><button onclick="updateCartQuantity(${item.id}, -1)" class="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300">-</button><span class="mx-2">${item.quantity}</span><button onclick="updateCartQuantity(${item.id}, 1)" class="px-2 py-1 bg-gray-200 rounded hover:bg-gray-300">+</button></td><td class="text-right">${storeConfig.currencySymbol}${item.price.toFixed(2)}</td><td class="text-right">${storeConfig.currencySymbol}${subtotal.toFixed(2)}</td><td class="text-center"><button onclick="removeFromCart(${item.id})" class="text-red-600 hover:text-red-800 p-1 icon-button" title="Eliminar"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg></button></td>`; });
+             cartTotalEl.textContent = total.toFixed(2);
+        }
+        function cancelSale() {
+            if (confirm("¿Está seguro de que desea cancelar esta venta? El carrito se vaciará.")) { currentCart = []; renderCart(); }
+        }
+        async function completeSale(paymentMethod) {
+            if (!storeConfig.cashIsOpen) { showMessage("Error", "La caja está cerrada. Ábrela para registrar ventas."); return; }
+            if (currentCart.length === 0) { showMessage("Error", "El carrito está vacío."); return; }
+
+            const total = currentCart.reduce((sum, item) => sum + item.price * item.quantity, 0);
+            const totalProfit = currentCart.reduce((sum, item) => sum + (item.price - (item.costPrice || 0)) * item.quantity, 0);
+            const customerIdInput = document.getElementById('customerSelectSale').value;
+            const customerId = customerIdInput ? parseInt(customerIdInput) : null;
+            let customer = null;
+
+            if (paymentMethod === 'credit') {
+                 if (!customerId) {
+                     showMessage("Error", "Seleccione un cliente para registrar una venta a crédito (fiado).");
+                     return;
+                 }
+                 try {
+                     customer = await getItemById(STORES.CUSTOMERS, customerId);
+                     if (!customer) {
+                         showMessage("Error", "Cliente seleccionado no encontrado.");
+                         return;
+                     }
+                 } catch (error) {
+                     console.error("Error al buscar cliente para crédito:", error);
+                     showMessage("Error", "No se pudo verificar el cliente seleccionado.");
+                     return;
+                 }
+            }
+            else if (paymentMethod === 'cash' && customerId) {
+                 try { customer = await getItemById(STORES.CUSTOMERS, customerId); } catch (error) { console.warn("Error al buscar cliente para venta al contado:", error); customer = null; }
+            }
+
+            const sale = {
+                timestamp: new Date().toISOString(),
+                items: currentCart.map(item => ({
+                    productId: item.id, code: item.code, name: item.name, quantity: item.quantity, price: item.price, costPrice: item.costPrice || 0, subtotal: item.price * item.quantity
+                })),
+                total: total, totalProfit: totalProfit, paymentMethod: paymentMethod, customerId: customerId
+            };
+
+            try {
+                const saleId = await addItem(STORES.SALES, sale);
+                sale.id = saleId;
+                const productUpdatePromises = currentCart.map(async (cartItem) => { const product = await getItemById(STORES.PRODUCTS, cartItem.id); if (product) { product.stock -= cartItem.quantity; if (product.stock < 0) product.stock = 0; await updateItem(STORES.PRODUCTS, product); } });
+                await Promise.all(productUpdatePromises);
+                if (paymentMethod === 'credit' && customer) {
+                     customer.creditBalance = (customer.creditBalance || 0) + total;
+                     const debtDetailsToAdd = sale.items.map(item => ({ saleId: saleId, timestamp: sale.timestamp, productId: item.productId, productName: item.name, quantity: item.quantity, price: item.price, subtotal: item.subtotal }));
+                     customer.debtDetails = [...(customer.debtDetails || []), ...debtDetailsToAdd];
+                     await updateItem(STORES.CUSTOMERS, customer);
+                }
+                if (paymentMethod === 'cash') { await addCashMovement('in', total, `Venta #${saleId}${customer ? ' Cliente: ' + customer.name : ''}`); }
+                currentCart = []; renderCart();
+                document.getElementById('productSearch').value = ''; document.getElementById('customerSelectSale').value = ''; renderInventoryTable(); loadCustomerOptions(); renderCustomerTable();
+                showMessage("Éxito", `Venta #${saleId} completada (${paymentMethod === 'cash' ? 'Efectivo' : 'Crédito'}). Ganancia: ${storeConfig.currencySymbol}${totalProfit.toFixed(2)}`);
+            } catch (error) { console.error("Error al completar la venta:", error); showMessage("Error", "Ocurrió un error al procesar la venta."); }
+        }
+
+        // --- Funciones de Gestión de Caja ---
+        function updateCashUI() {
+            const indicator = document.getElementById('cashStatusIndicator');
+            const openButton = document.getElementById('openCashRegisterButton'); const closeButton = document.getElementById('closeCashRegisterButton'); const cashAmountInput = document.getElementById('cashAmount'); const cashDescInput = document.getElementById('cashDescription'); const addCashInButton = document.getElementById('addCashIn');
+            const addCashOutButton = document.getElementById('addCashOut'); const completeSaleCashButton = document.getElementById('completeSaleCash'); const completeSaleCreditButton = document.getElementById('completeSaleCredit'); const saleBlockedMessage = document.getElementById('saleBlockedMessage'); const cashOpenInfo = document.getElementById('cashOpenInfo');
+            if (storeConfig.cashIsOpen) { indicator.textContent = `Caja Abierta (Desde: ${new Date(storeConfig.cashOpenTimestamp).toLocaleString()})`; indicator.className = 'mt-2 mx-auto w-fit text-sm open'; openButton.disabled = true; closeButton.disabled = false; cashAmountInput.disabled = false; cashDescInput.disabled = false; addCashInButton.disabled = false; addCashOutButton.disabled = false; completeSaleCashButton.disabled = false; completeSaleCreditButton.disabled = false; saleBlockedMessage.classList.add('hidden'); cashOpenInfo.textContent = `Monto inicial: ${storeConfig.currencySymbol}${storeConfig.cashInitialAmount.toFixed(2)}`; }
+            else { indicator.textContent = `Caja Cerrada ${storeConfig.cashCloseTimestamp ? `(Último cierre: ${new Date(storeConfig.cashCloseTimestamp).toLocaleString()})` : ''}`; indicator.className = 'mt-2 mx-auto w-fit text-sm closed'; openButton.disabled = false; closeButton.disabled = true; cashAmountInput.disabled = true; cashDescInput.disabled = true; addCashInButton.disabled = true; addCashOutButton.disabled = true; completeSaleCashButton.disabled = true; completeSaleCreditButton.disabled = true; saleBlockedMessage.textContent = "La caja está cerrada. No es posible realizar ventas."; saleBlockedMessage.classList.remove('hidden'); cashOpenInfo.textContent = ''; }
+        }
+        function openCashRegister() {
+             if (storeConfig.cashIsOpen) { showMessage("Info", "La caja ya está abierta."); return; }
+             document.getElementById('initialCashAmount').value = ''; openModal('openCashModal');
+         }
+        async function processOpenCash(event) {
+             event.preventDefault();
+             const initialAmount = parseFloat(document.getElementById('initialCashAmount').value); if (isNaN(initialAmount) || initialAmount < 0) { showMessage("Error", "Monto inicial inválido."); return; } storeConfig.cashIsOpen = true; storeConfig.cashInitialAmount = initialAmount; storeConfig.cashOpenTimestamp = new Date().toISOString(); storeConfig.cashCloseTimestamp = null; try { await saveConfig(false); closeModal('openCashModal'); showMessage("Éxito", `Caja abierta con ${storeConfig.currencySymbol}${initialAmount.toFixed(2)}.`); updateCashUI(); updateCashBalance(); renderCashMovementsTable(); } catch (error) { console.error("Error al guardar apertura de caja:", error); showMessage("Error", "No se pudo guardar la apertura de la caja."); storeConfig.cashIsOpen = false; storeConfig.cashInitialAmount = 0; storeConfig.cashOpenTimestamp = null; }
+         }
+        async function closeCashRegister() {
+             if (!storeConfig.cashIsOpen) { showMessage("Info", "La caja ya está cerrada."); return; }
+             try {
+                 const openTime = new Date(storeConfig.cashOpenTimestamp);
+                 const allSales = await getAllItems(STORES.SALES) || [];
+                 const allMovements = await getAllItems(STORES.CASH_MOVEMENTS) || [];
+                 const salesSince = allSales.filter(s => new Date(s.timestamp) >= openTime);
+                 const movesSince = allMovements.filter(m => new Date(m.timestamp) >= openTime);
+                 const cashSales = salesSince.filter(s => s.paymentMethod === 'cash').reduce((sum, s) => sum + s.total, 0);
+                 const totalProfitCashSales = salesSince.filter(s => s.paymentMethod === 'cash').reduce((sum, s) => sum + (s.totalProfit || 0), 0);
+                 const cashIn = movesSince.filter(m => m.type === 'in' && !m.description.startsWith('Venta #')).reduce((sum, m) => sum + m.amount, 0);
+                 const cashOut = movesSince.filter(m => m.type === 'out').reduce((sum, m) => sum + m.amount, 0);
+                 const expected = storeConfig.cashInitialAmount + cashSales + cashIn - cashOut;
+                 document.getElementById('summaryOpenTime').textContent = openTime.toLocaleString();
+                 document.getElementById('summaryInitialAmount').textContent = `${storeConfig.currencySymbol}${storeConfig.cashInitialAmount.toFixed(2)}`;
+                 document.getElementById('summaryCashSales').textContent = `${storeConfig.currencySymbol}${cashSales.toFixed(2)}`;
+                 document.getElementById('summaryCashIn').textContent = `${storeConfig.currencySymbol}${cashIn.toFixed(2)}`;
+                 document.getElementById('summaryCashOut').textContent = `${storeConfig.currencySymbol}${cashOut.toFixed(2)}`;
+                 document.getElementById('summaryProfit').textContent = `${storeConfig.currencySymbol}${totalProfitCashSales.toFixed(2)}`;
+                 document.getElementById('summaryExpectedBalance').textContent = `${storeConfig.currencySymbol}${expected.toFixed(2)}`;
+                 document.getElementById('finalCashAmount').value = '';
+                 document.getElementById('cashDifference').textContent = '';
+                 const finalInput = document.getElementById('finalCashAmount');
+                 finalInput.oninput = () => { const final = parseFloat(finalInput.value); const diffEl = document.getElementById('cashDifference'); if (!isNaN(final)) { const diff = final - expected; diffEl.textContent = `Diferencia: ${storeConfig.currencySymbol}${diff.toFixed(2)}`; diffEl.className = `text-sm mt-1 ${diff === 0 ? 'text-green-600' : 'text-red-600 font-semibold'}`; } else { diffEl.textContent = ''; } };
+                 openModal('closeCashModal');
+             } catch (error) { console.error("Error al calcular resumen de cierre:", error); showMessage("Error", "Error al calcular resumen de cierre."); }
+         }
+        async function processCloseCash() {
+             const finalAmount = parseFloat(document.getElementById('finalCashAmount').value);
+             storeConfig.cashIsOpen = false; storeConfig.cashCloseTimestamp = new Date().toISOString(); try { await saveConfig(false); closeModal('closeCashModal'); showMessage("Éxito", "Caja cerrada con éxito."); updateCashUI(); updateCashBalance(); renderCashMovementsTable(); } catch (error) { console.error("Error al guardar cierre de caja:", error); showMessage("Error", "No se pudo guardar el cierre de la caja."); storeConfig.cashIsOpen = true; storeConfig.cashCloseTimestamp = null; }
+         }
+        async function addCashMovement(type, amount, description) {
+             if (!storeConfig.cashIsOpen && !description.startsWith('Venta #') && !description.startsWith('Pago cliente:')) { showMessage("Error", "Caja cerrada. No es posible registrar movimientos manuales."); return false; } if (isNaN(amount) || amount <= 0) { showMessage("Error", "Monto inválido. Debe ser mayor que 0."); return false; } if (!description) { showMessage("Error", "Descripción obligatoria para movimientos manuales."); return false; } const movement = { timestamp: new Date().toISOString(), type: type, amount: amount, description: description }; try { await addItem(STORES.CASH_MOVEMENTS, movement); updateCashBalance(); renderCashMovementsTable(); if (!description.startsWith('Venta #') && !description.startsWith('Pago cliente:')) { document.getElementById('cashAmount').value = ''; document.getElementById('cashDescription').value = ''; showMessage("Éxito", `Movimiento (${type === 'in' ? 'Entrada' : 'Salida'}) registrado.`); } return true; } catch (error) { console.error("Error al agregar movimiento de caja:", error); showMessage("Error", "No se pudo registrar el movimiento."); return false; }
+        }
+        async function updateCashBalance() {
+            const balanceEl = document.getElementById('cashBalance');
+             try { let balance = 0; if (storeConfig.cashIsOpen && storeConfig.cashOpenTimestamp) { const openT = new Date(storeConfig.cashOpenTimestamp); const sales = await getAllItems(STORES.SALES) || []; const moves = await getAllItems(STORES.CASH_MOVEMENTS) || []; const salesS = sales.filter(s => new Date(s.timestamp) >= openT); const movesS = moves.filter(m => new Date(m.timestamp) >= openT); const cashS = salesS.filter(s => s.paymentMethod === 'cash').reduce((sum, s) => sum + s.total, 0); const cashI = movesS.filter(m => m.type === 'in' && !m.description.startsWith('Venta #')).reduce((sum, m) => sum + m.amount, 0); const cashO = movesS.filter(m => m.type === 'out').reduce((sum, m) => sum + m.amount, 0); balance = storeConfig.cashInitialAmount + cashS + cashI - cashO; } else { balance = 0; } balanceEl.textContent = balance.toFixed(2); } catch (error) { console.error("Error al calcular saldo de caja:", error); balanceEl.textContent = 'Error'; }
+        }
+        async function renderCashMovementsTable(startDate = null, endDate = null) {
+             const tableBody = document.getElementById('cashMovementsTableBody');
+             tableBody.innerHTML = ''; try { let movements = await getAllItems(STORES.CASH_MOVEMENTS) || []; let filterDescription = ""; if (storeConfig.cashIsOpen && storeConfig.cashOpenTimestamp && !startDate && !endDate) { const openTime = new Date(storeConfig.cashOpenTimestamp); movements = movements.filter(m => new Date(m.timestamp) >= openTime); filterDescription = " (Sesión Actual)"; } else if (!storeConfig.cashIsOpen && !startDate && !endDate) { filterDescription = " (Historial Completo)"; } if (startDate || endDate) { const start = startDate ? new Date(startDate + 'T00:00:00') : null; const end = endDate ? new Date(endDate + 'T23:59:59.999') : null; movements = movements.filter(m => { const moveTime = new Date(m.timestamp); const afterStart = start ? moveTime >= start : true; const beforeEnd = end ? moveTime <= end : true; return afterStart && beforeEnd; }); filterDescription = ` (Filtrado: ${startDate || '*'} a ${endDate || '*'})`; if (filterDescription.includes("Sesión Actual")) { filterDescription = filterDescription.replace(" (Sesión Actual)", ""); } } movements.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp)); document.querySelector('#cashMovementsHistory h3').textContent = `Movimientos${filterDescription}`; if (movements.length === 0) { tableBody.innerHTML = `<tr><td colspan="4" class="text-center py-4 text-gray-500">No hay movimientos${filterDescription}.</td></tr>`; return; } movements.forEach(mov => { const row = tableBody.insertRow(); const typeT = mov.type === 'in' ? 'Entrada' : 'Salida'; const amountC = mov.type === 'in' ? 'text-green-600' : 'text-red-600'; row.innerHTML = `<td>${new Date(mov.timestamp).toLocaleString()}</td><td>${typeT}</td><td class="text-right ${amountC}">${storeConfig.currencySymbol}${(mov.amount || 0).toFixed(2)}</td><td>${mov.description || '-'}</td>`; }); } catch (error) { console.error("Error al renderizar movimientos de caja:", error); tableBody.innerHTML = `<tr><td colspan="4" class="text-center py-4 text-red-500">Error al cargar movimientos.</td></tr>`; }
+         }
+
+        // --- Funciones de Gestión de Pagos de Clientes ---
+        async function openPaymentModal(customerId) {
+             if (!storeConfig.cashIsOpen) { showMessage("Error", "La caja está cerrada. Ábrela para registrar pagos."); return; }
+            try {
+                const customer = await getItemById(STORES.CUSTOMERS, customerId);
+                 if (customer && (customer.creditBalance || 0) > 0) {
+                    document.getElementById('paymentCustomerId').value = customer.id;
+                     document.getElementById('paymentCustomerName').textContent = customer.name; document.getElementById('paymentCustomerBalance').textContent = (customer.creditBalance || 0).toFixed(2); document.getElementById('paymentAmount').value = ''; document.getElementById('paymentAmount').max = customer.creditBalance; document.getElementById('paymentDescription').value = 'Pago de la cuenta'; openModal('paymentModal');
+                 } else if (customer) { showMessage("Info", `El cliente ${customer.name} no tiene saldo deudor.`); }
+                else { showMessage("Error", "Cliente no encontrado."); }
+            } catch (error) { console.error("Error al abrir modal de pago:", error); showMessage("Error", "No se pudo cargar la información del cliente."); }
+        }
+        async function processCustomerPayment(event) {
+            event.preventDefault();
+             if (!storeConfig.cashIsOpen) { showMessage("Error", "Caja cerrada. Abra para registrar pagos."); closeModal('paymentModal'); return; } const customerId = parseInt(document.getElementById('paymentCustomerId').value);
+             const paymentAmount = parseFloat(document.getElementById('paymentAmount').value); const paymentDesc = document.getElementById('paymentDescription').value.trim() || 'Pago de la cuenta';
+             if (isNaN(customerId) || isNaN(paymentAmount) || paymentAmount <= 0) { showMessage("Error", "Monto de pago inválido."); return; } try { const customer = await getItemById(STORES.CUSTOMERS, customerId); if (!customer) { showMessage("Error", "Cliente no encontrado."); return; } if (paymentAmount > (customer.creditBalance || 0)) { showMessage("Aviso", `El monto del pago (${storeConfig.currencySymbol}${paymentAmount.toFixed(2)}) no puede exceder el saldo deudor (${storeConfig.currencySymbol}${(customer.creditBalance || 0).toFixed(2)}).`); return; } customer.creditBalance -= paymentAmount; await updateItem(STORES.CUSTOMERS, customer); await addCashMovement('in', paymentAmount, `Pago cliente: ${customer.name} (${paymentDesc})`); closeModal('paymentModal'); renderCustomerTable(); loadCustomerOptions(); showMessage("Éxito", `Pago de ${storeConfig.currencySymbol}${paymentAmount.toFixed(2)} registrado para ${customer.name}. Nuevo saldo: ${storeConfig.currencySymbol}${customer.creditBalance.toFixed(2)}`); } catch (error) { console.error("Error al processar pago:", error); showMessage("Error", "Error al registrar pago."); }
+        }
+
+        // --- Funciones Extrato/Detalhes de Conta Cliente ---
+        async function openDebtDetailsModal(customerId) {
+            currentCustomerTransactions = [];
+            currentViewingCustomerId = customerId;
+            try {
+                const customer = await getItemById(STORES.CUSTOMERS, customerId);
+                if (!customer) {
+                    showMessage("Error", "Cliente no encontrado.");
+                    return;
+                }
+
+                document.getElementById('debtDetailCustomerName').textContent = customer.name;
+                document.getElementById('debtDetailCustomerBalance').textContent = (customer.creditBalance || 0).toFixed(2);
+                document.getElementById('debtDetailsStartDate').value = '';
+                document.getElementById('debtDetailsEndDate').value = '';
+
+                const customerSales = await getAllItemsByIndex(STORES.SALES, 'customerId', customerId) || [];
+                const allCashMovements = await getAllItems(STORES.CASH_MOVEMENTS) || [];
+                const customerPayments = allCashMovements.filter(m => m.type === 'in' && m.description && m.description.includes(`Pago cliente: ${customer.name}`));
+
+                let transactions = [];
+
+                customerSales.forEach(sale => {
+                    const saleType = sale.paymentMethod === 'credit' ? 'Venta Fiado' : 'Venta Contado';
+                    if (sale.paymentMethod === 'credit') {
+                         (sale.items || []).forEach(item => {
+                             transactions.push({
+                                 timestamp: sale.timestamp, type: saleType, description: `${item.quantity}x ${item.name}`,
+                                 amount: item.subtotal, isSaleItem: true, saleId: sale.id
+                             });
+                         });
+                    } else {
+                         transactions.push({
+                             timestamp: sale.timestamp, type: saleType, description: `Venta #${sale.id} (Contado)`,
+                             amount: sale.total, isSaleItem: false, saleId: sale.id
+                         });
+                    }
+                });
+
+                customerPayments.forEach(payment => {
+                    transactions.push({
+                        timestamp: payment.timestamp, type: 'Pago',
+                        description: payment.description.replace(`Pago cliente: ${customer.name}`, '').trim() || 'Pago de la cuenta',
+                        amount: -payment.amount, isSaleItem: false
+                    });
+                });
+
+                transactions.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+                currentCustomerTransactions = transactions;
+
+                renderDebtDetailsTable(currentCustomerTransactions);
+                updateDebtDetailsPDFButton();
+                openModal('debtDetailsModal');
+
+            } catch (error) {
+                console.error("Error al cargar extracto de cuenta:", error);
+                showMessage("Error", "No se pudo cargar el extracto de cuenta.");
+                currentCustomerTransactions = [];
+                currentViewingCustomerId = null;
+            }
+        }
+
+        function renderDebtDetailsTable(transactionsToRender) {
+            const tableBody = document.getElementById('debtDetailsTableBody');
+            const messageEl = document.getElementById('debtDetailsMessage');
+            tableBody.innerHTML = '';
+
+            if (!transactionsToRender || transactionsToRender.length === 0) {
+                messageEl.classList.remove('hidden');
+                tableBody.classList.add('hidden');
+            } else {
+                messageEl.classList.add('hidden');
+                tableBody.classList.remove('hidden');
+                transactionsToRender.forEach(tx => {
+                    const row = tableBody.insertRow();
+                    const amount = tx.amount || 0;
+                    let amountColor = 'text-gray-800'; let amountPrefix = '';
+                    if (tx.type === 'Pago') { amountColor = 'text-green-600'; amountPrefix = ''; }
+                    else if (tx.type === 'Venta Fiado') { amountColor = 'text-red-600'; amountPrefix = '+'; }
+                    else if (tx.type === 'Venta Contado') { amountColor = 'text-blue-600'; amountPrefix = '+'; }
+                    row.innerHTML = `
+                        <td>${new Date(tx.timestamp).toLocaleString()}</td> <td>${tx.type}</td> <td>${tx.description}</td>
+                        <td class="text-right ${amountColor}">${amountPrefix}${storeConfig.currencySymbol}${Math.abs(amount).toFixed(2)}</td>
+                    `;
+                });
+            }
+            updateDebtDetailsPDFButton(transactionsToRender);
+        }
+
+        function filterAndRenderDebtDetails() {
+            const startDateStr = document.getElementById('debtDetailsStartDate').value;
+            const endDateStr = document.getElementById('debtDetailsEndDate').value;
+            const start = startDateStr ? new Date(startDateStr + 'T00:00:00') : null;
+            const end = endDateStr ? new Date(endDateStr + 'T23:59:59.999') : null;
+            const filtered = currentCustomerTransactions.filter(tx => {
+                 const txDate = new Date(tx.timestamp);
+                 const afterStart = start ? txDate >= start : true;
+                 const beforeEnd = end ? txDate <= end : true;
+                 return afterStart && beforeEnd;
+            });
+            renderDebtDetailsTable(filtered);
+        }
+
+        function clearDebtDetailsFilter() {
+             document.getElementById('debtDetailsStartDate').value = '';
+             document.getElementById('debtDetailsEndDate').value = '';
+             renderDebtDetailsTable(currentCustomerTransactions);
+        }
+
+        function updateDebtDetailsPDFButton(transactions = currentCustomerTransactions) {
+             const pdfButton = document.getElementById('generateCustomerStatementPDFButton');
+             pdfButton.onclick = () => generateCustomerStatementPDF(currentViewingCustomerId, transactions);
+        }
+
+
+        // --- Funciones de Historial ---
+        function addDateFilterControls(containerId, filterFunction) {
+            try {
+                const container = document.getElementById(containerId);
+                 if (!container) { console.error(`Contenedor #${containerId} no encontrado.`); return; }
+                const existingControls = container.querySelector('.date-filter-controls');
+                 if (existingControls) { const startInput = existingControls.querySelector(`#${containerId}-startDate`); const endInput = existingControls.querySelector(`#${containerId}-endDate`); if(startInput) startInput.value = ''; if(endInput) endInput.value = ''; return; }
+                const controlsDiv = document.createElement('div');
+                 controlsDiv.className = 'date-filter-controls';
+                controlsDiv.innerHTML = `<label for="${containerId}-startDate">Desde:</label><input type="date" id="${containerId}-startDate"><label for="${containerId}-endDate">Hasta:</label><input type="date" id="${containerId}-endDate"><button id="${containerId}-filterBtn" class="bg-blue-500 hover:bg-blue-600 text-white rounded-lg shadow">Filtrar</button><button id="${containerId}-clearBtn" class="bg-gray-400 hover:bg-gray-500 text-white rounded-lg shadow">Mostrar Todos</button>`;
+                 container.prepend(controlsDiv);
+                 const filterBtn = document.getElementById(`${containerId}-filterBtn`); const clearBtn = document.getElementById(`${containerId}-clearBtn`); const startDateInput = document.getElementById(`${containerId}-startDate`); const endDateInput = document.getElementById(`${containerId}-endDate`);
+                 if(filterBtn && clearBtn && startDateInput && endDateInput) {
+                     filterBtn.onclick = () => { const start = startDateInput.value; const end = endDateInput.value; filterFunction(start || null, end || null); };
+                     clearBtn.onclick = () => { startDateInput.value = ''; endDateInput.value = ''; filterFunction(null, null); };
+                 } else { console.error(`Controles de filtro no encontrados en #${containerId}.`); }
+            } catch (error) { console.error(`Error al añadir controles a #${containerId}:`, error); showMessage("Error", "Error al crear filtros de fecha."); }
+        }
+        async function renderSalesHistory(startDate = null, endDate = null) {
+            const displayArea = document.getElementById('historyDisplayArea');
+             const historyContent = document.getElementById('historyContent');
+            if (!displayArea || !historyContent) { console.error("Elementos de historial no encontrados."); return; }
+            historyContent.innerHTML = `<h3 class="text-lg font-medium mb-2">Historial de Ventas</h3>`;
+             try {
+                addDateFilterControls('historyDisplayArea', renderSalesHistory);
+                 let sales = await getAllItems(STORES.SALES) || [];
+                if (startDate || endDate) { const start = startDate ? new Date(startDate + 'T00:00:00') : null; const end = endDate ? new Date(endDate + 'T23:59:59.999') : null; sales = sales.filter(s => { const saleTime = new Date(s.timestamp); const afterStart = start ? saleTime >= start : true; const beforeEnd = end ? saleTime <= end : true; return afterStart && beforeEnd; }); }
+                sales.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+                 if (sales.length === 0) { historyContent.innerHTML += `<p class="text-gray-500">No hay ventas registradas${startDate || endDate ? ' para el período seleccionado' : ''}.</p>`; return; }
+                const table = document.createElement('table');
+                 table.className = 'min-w-full border-collapse border border-gray-300 mb-4';
+                table.innerHTML = `<thead class="bg-gray-100"><tr><th>ID</th><th>Fecha</th><th>Cliente</th><th>Items</th><th>Total (${storeConfig.currencySymbol})</th><th>Ganancia (${storeConfig.currencySymbol})</th><th>Pago</th><th>Acción</th></tr></thead><tbody></tbody>`;
+                const tbody = table.querySelector('tbody');
+                 const custProms = sales.map(s => s.customerId ? getItemById(STORES.CUSTOMERS, s.customerId) : Promise.resolve(null)); const customers = await Promise.all(custProms);
+                 const custMap = customers.reduce((map, c) => { if (c) map[c.id] = c.name; return map; }, {});
+                 sales.forEach(sale => {
+                    const row = tbody.insertRow();
+                    const custName = sale.customerId ? (custMap[sale.customerId] || `ID ${sale.customerId}`) : 'N/A';
+                    const itemsSum = (sale.items || []).map(i => `${i.quantity}x ${i.name}`).join(', ');
+                     const payM = sale.paymentMethod === 'cash' ? 'Efectivo' : 'Crédito';
+                    const profit = sale.totalProfit || 0;
+                    const profitColor = profit >= 0 ? 'text-green-700' : 'text-red-700';
+                     row.innerHTML = `<td>${sale.id}</td><td>${new Date(sale.timestamp).toLocaleString()}</td><td>${custName}</td><td class="text-sm">${itemsSum.length > 50 ? itemsSum.substring(0, 50) + '...' : itemsSum}</td><td class="text-right">${(sale.total || 0).toFixed(2)}</td><td class="text-right ${profitColor}">${profit.toFixed(2)}</td><td>${payM}</td><td class="text-center"><button onclick="regenerateSalePDF(${sale.id})" class="text-blue-600 hover:text-blue-800 p-1 icon-button" title="Imprimir Recibo"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect width="12" height="8" x="6" y="14"/></svg></button></td>`;
+                 });
+                historyContent.appendChild(table);
+                const pdfBtn = document.createElement('button'); pdfBtn.id = 'generateSalesHistoryPDF'; pdfBtn.className = 'bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 px-4 rounded-lg shadow mt-4';
+                 pdfBtn.textContent = 'Generar PDF Historial Ventas (Filtrado)';
+                pdfBtn.onclick = () => generateSalesHistoryPDF(sales, custMap);
+                historyContent.appendChild(pdfBtn);
+             } catch (error) { console.error("Error al renderizar historial de ventas:", error); historyContent.innerHTML += `<p class="text-red-500">Error al cargar el historial de ventas.</p>`; }
+        }
+        async function regenerateSalePDF(saleId) {
+            try { const sale = await getItemById(STORES.SALES, saleId); if (sale) { generateSaleTicketPDF(sale); } else { showMessage("Error", "Venta no encontrada para PDF."); } } catch (error) { console.error("Error al regenerar PDF de la venta:", error); showMessage("Error", "Error al obtener venta."); }
+        }
+        async function renderCashHistory(startDate = null, endDate = null) {
+            const displayArea = document.getElementById('historyDisplayArea');
+             const historyContent = document.getElementById('historyContent');
+             if (!displayArea || !historyContent) { console.error("Elementos de historial no encontrados."); return; }
+            historyContent.innerHTML = `<h3 class="text-lg font-medium mb-2">Historial Completo de Movimientos de Caja</h3>`;
+             try {
+                addDateFilterControls('historyDisplayArea', renderCashHistory);
+                 let movements = await getAllItems(STORES.CASH_MOVEMENTS) || [];
+                 if (startDate || endDate) { const start = startDate ? new Date(startDate + 'T00:00:00') : null; const end = endDate ? new Date(endDate + 'T23:59:59.999') : null; movements = movements.filter(m => { const moveTime = new Date(m.timestamp); const afterStart = start ? moveTime >= start : true; const beforeEnd = end ? moveTime <= end : true; return afterStart && beforeEnd; }); }
+                movements.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+                 if (movements.length === 0) { historyContent.innerHTML += `<p class="text-gray-500">No hay movimientos registrados${startDate || endDate ? ' para el período seleccionado' : ''}.</p>`; return; }
+                const table = document.createElement('table');
+                 table.className = 'min-w-full border-collapse border border-gray-300 mb-4'; table.innerHTML = `<thead class="bg-gray-100"><tr><th>Fecha</th><th>Tipo</th><th>Monto (${storeConfig.currencySymbol})</th><th>Descripción</th></tr></thead><tbody></tbody>`; const tbody = table.querySelector('tbody');
+                 movements.forEach(mov => { const row = tbody.insertRow(); const typeT = mov.type === 'in' ? 'Entrada' : 'Salida'; const amountC = mov.type === 'in' ? 'text-green-600' : 'text-red-600'; row.innerHTML = `<td>${new Date(mov.timestamp).toLocaleString()}</td><td>${typeT}</td><td class="text-right ${amountC}">${(mov.amount || 0).toFixed(2)}</td><td>${mov.description || '-'}</td>`; });
+                 historyContent.appendChild(table);
+                const pdfBtn = document.createElement('button'); pdfBtn.className = 'bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg shadow mt-4';
+                 pdfBtn.textContent = 'Generar Informe PDF Caja (Filtrado)';
+                pdfBtn.onclick = () => generateCashReportPDF(false, movements);
+                historyContent.appendChild(pdfBtn);
+             } catch (error) { console.error("Error al renderizar historial de caja:", error); historyContent.innerHTML += `<p class="text-red-500">Error al cargar el historial de caja.</p>`; }
+        }
+
+
+        // --- Funciones de Exportación/Importación de Datos ---
+        async function exportData() {
+            try {
+                const products = await getAllItems(STORES.PRODUCTS) || [];
+                const customers = await getAllItems(STORES.CUSTOMERS) || [];
+                const sales = await getAllItems(STORES.SALES) || [];
+                const cashMovements = await getAllItems(STORES.CASH_MOVEMENTS) || [];
+                const config = await getItemById(STORES.CONFIG, 'storeSettings') || storeConfig;
+                const dataToExport = { version: DB_VERSION, exportDate: new Date().toISOString(), config: config, products: products, customers: customers, sales: sales, cashMovements: cashMovements };
+                const dataStr = JSON.stringify(dataToExport, null, 2);
+                const blob = new Blob([dataStr], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a'); a.href = url;
+                const storeNameSlug = (storeConfig.storeName || 'POS').replace(/[^a-z0-9]/gi, '_').toLowerCase();
+                a.download = `pos_backup_${storeNameSlug}_${new Date().toISOString().slice(0, 10)}.json`;
+                document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+                showMessage("Éxito", "Datos exportados con éxito.");
+            } catch (error) { console.error("Error al exportar datos:", error); showMessage("Error", "No se pudo exportar los datos."); }
+        }
+        async function importData() {
+            const fileInput = document.getElementById('importFile');
+            if (!fileInput.files || fileInput.files.length === 0) { showMessage("Aviso", "Seleccione un archivo JSON para importar."); return; }
+            const file = fileInput.files[0];
+            if (file.type !== 'application/json') { showMessage("Error", "El archivo debe ser de tipo JSON."); return; }
+            if (!confirm("ATENCIÓN: Importar datos reemplazará TODOS los datos actuales. ¿Está seguro? ¡Haga una copia de seguridad antes!")) { fileInput.value = ''; return; }
+            const reader = new FileReader();
+            reader.onload = async (event) => {
+                try {
+                    const importedData = JSON.parse(event.target.result);
+                    if (!importedData || typeof importedData !== 'object' || !importedData.products || !importedData.customers || !importedData.sales || !importedData.cashMovements || !importedData.config) { throw new Error("Formato de archivo inválido o incompleto."); }
+                    await clearAllDataStores();
+                    const importPromises = [];
+                    if (importedData.config) { const cleanConfig = { ...importedData.config, id: 'storeSettings' }; delete cleanConfig.currentLanguage; importPromises.push(updateItem(STORES.CONFIG, cleanConfig)); }
+                    if (importedData.products) importPromises.push(...importedData.products.map(p => addItem(STORES.PRODUCTS, { ...p, costPrice: p.costPrice || 0 })));
+                    if (importedData.customers) importPromises.push(...importedData.customers.map(c => addItem(STORES.CUSTOMERS, c)));
+                    if (importedData.sales) importPromises.push(...importedData.sales.map(s => addItem(STORES.SALES, { ...s, totalProfit: s.totalProfit || 0 })));
+                    if (importedData.cashMovements) importPromises.push(...importedData.cashMovements.map(m => addItem(STORES.CASH_MOVEMENTS, m)));
+                    await Promise.all(importPromises);
+                    await loadConfig(); updateCashUI(); showSection('configuracion');
+                    showMessage("Éxito", "Datos importados con éxito.");
+                } catch (error) { console.error("Error al importar datos:", error); showMessage("Error", `Fallo en la importación: ${error.message}.`); }
+                finally { fileInput.value = ''; }
+            };
+            reader.onerror = () => { showMessage("Error", "No se pudo leer el archivo."); fileInput.value = ''; };
+            reader.readAsText(file);
+        }
+        function clearAllDataStores() {
+            return new Promise(async (resolve, reject) => { if (!db) return reject("BD no inicializado"); try { const transaction = db.transaction(Object.values(STORES), 'readwrite'); transaction.onerror = (event) => reject(event.target.error); let completed = 0; const totalStores = Object.values(STORES).length; Object.values(STORES).forEach(storeName => { const request = transaction.objectStore(storeName).clear(); request.onsuccess = () => { completed++; if (completed === totalStores) resolve(); }; }); } catch (error) { reject(error); } });
+         }
+        async function clearAllData() {
+            if (confirm("ATENCIÓN MÁXIMA: ¿Está absolutamente seguro de que desea borrar TODOS los datos? ¡ESTA ACCIÓN ES IRREVERSIBLE!")) {
+                if (confirm("SEGUNDA CONFIRMACIÓN: ¿Realmente desea borrar TODO?")) {
+                    try {
+                         await clearAllDataStores();
+                         storeConfig = { storeName: 'Mi Tienda', currencySymbol: '$', cashIsOpen: false, cashInitialAmount: 0, cashOpenTimestamp: null, cashCloseTimestamp: null };
+                         await addItem(STORES.CONFIG, { id: 'storeSettings', ...storeConfig });
+                        currentCart = []; await loadConfig(); updateCashUI(); showSection('configuracion');
+                         showMessage("Éxito", "TODOS los datos fueron borrados con éxito.");
+                    } catch (error) { console.error("Error al borrar datos:", error); showMessage("Error", "No se pudo borrar todos los datos."); }
+                }
+            }
+        }
+
+
+        // --- Funciones de Generación de PDF ---
+        function checkPdfLibraries() {
+            if (typeof jsPDF === 'undefined') { showMessage("Error", "La biblioteca jsPDF no está cargada."); return false; }
+            try { const JSPDFClass = window.jspdf && window.jspdf.jsPDF ? window.jspdf.jsPDF : jsPDF; const dummyDoc = new JSPDFClass(); if (typeof dummyDoc.autoTable !== 'function') { showMessage("Error", "La función autoTable no está disponible."); return false; } } catch (e) { showMessage("Error", "Error al verificar las bibliotecas PDF."); return false; } return true;
+         }
+        async function generateSaleTicketPDF(saleData) {
+             if (!checkPdfLibraries()) return;
+             if (!saleData || !saleData.items || !saleData.id) { console.error("generateSaleTicketPDF: Datos de venta inválidos.", saleData); showMessage("Error", "Datos de venta inválidos para PDF."); return; }
+             let customerName = 'N/A';
+             if (saleData.customerId) { try { const c = await getItemById(STORES.CUSTOMERS, saleData.customerId); customerName = c ? c.name : `ID ${saleData.customerId}`; } catch (e) { console.error("Error buscando cliente para PDF:", e); } }
+             try {
+                 const JSPDFClass = window.jspdf && window.jspdf.jsPDF ? window.jspdf.jsPDF : jsPDF; const doc = new JSPDFClass({ orientation: 'p', unit: 'mm', format: [80, 200] });
+                 const pageWidth = 70; const margin = 5; let cursorY = 10;
+                 doc.setFontSize(12); doc.setFont(undefined, 'bold'); doc.text(storeConfig.storeName || "Comercio", pageWidth / 2 + margin, cursorY, { align: 'center' }); cursorY += 6;
+                 doc.setFontSize(8); doc.setFont(undefined, 'normal'); doc.text(`Fecha: ${new Date(saleData.timestamp).toLocaleString()}`, margin, cursorY); cursorY += 4; doc.text(`Recibo Venta #: ${saleData.id}`, margin, cursorY); cursorY += 4; doc.text(`Cliente: ${customerName}`, margin, cursorY); cursorY += 4; doc.text(`Pago: ${saleData.paymentMethod === 'cash' ? 'Efectivo' : 'Crédito'}`, margin, cursorY); cursorY += 6;
+                 doc.setLineWidth(0.2); doc.line(margin, cursorY, margin + pageWidth, cursorY); cursorY += 4;
+                 doc.setFontSize(8);
+                 (saleData.items || []).forEach(item => { const sub = `${storeConfig.currencySymbol}${(item.subtotal || 0).toFixed(2)}`; const line1 = `${item.quantity || 0} x ${item.name || '?'}`; doc.text(line1, margin, cursorY); const subW = doc.getTextWidth(sub); doc.text(sub, margin + pageWidth - subW, cursorY, { align: 'right' }); cursorY += 4; });
+                 doc.setLineWidth(0.2); doc.line(margin, cursorY, margin + pageWidth, cursorY); cursorY += 5;
+                 doc.setFontSize(10); doc.setFont(undefined, 'bold'); const total = `TOTAL: ${storeConfig.currencySymbol}${(saleData.total || 0).toFixed(2)}`; const totalW = doc.getTextWidth(total); doc.text(total, margin + pageWidth - totalW, cursorY, { align: 'right' }); cursorY += 5;
+                 doc.setFontSize(8); doc.setFont(undefined, 'normal'); doc.text("¡Gracias por su compra!", pageWidth / 2 + margin, cursorY, { align: 'center' }); cursorY += 4; doc.text("Sistema POS v1.41", pageWidth / 2 + margin, cursorY, { align: 'center' });
+                 const filename = `Recibo_Venta_${saleData.id}`; doc.save(`${filename}.pdf`);
+                 console.log(`Recibo PDF "${filename}" generado.`);
+             } catch (error) { console.error("Error al generar recibo PDF:", error); showMessage("Error", "No se pudo generar el recibo de la venta en PDF."); }
+         }
+        async function generateCashReportPDF(sessionOnly = false, preFilteredMovements = null) {
+             if (!checkPdfLibraries()) return;
+             try {
+                 const JSPDFClass = window.jspdf && window.jspdf.jsPDF ? window.jspdf.jsPDF : jsPDF; const doc = new JSPDFClass();
+                 let movements = preFilteredMovements;
+                 let reportTitle = 'Informe Completo de Movimientos de Caja'; let filenamePrefix = 'Informe_Caja_Completo'; let initialAmount = 0; let sessionSales = []; let startY = 35; let totalSessionProfit = 0;
+
+                 if (!movements) {
+                     movements = await getAllItems(STORES.CASH_MOVEMENTS) || [];
+                     if (sessionOnly && storeConfig.cashIsOpen && storeConfig.cashOpenTimestamp) {
+                         const openTime = new Date(storeConfig.cashOpenTimestamp);
+                         movements = movements.filter(m => new Date(m.timestamp) >= openTime);
+                         reportTitle = 'Informe de Caja (Sesión Actual)'; filenamePrefix = 'Informe_Caja_Sesion';
+                         initialAmount = storeConfig.cashInitialAmount;
+                         const allSales = await getAllItems(STORES.SALES) || [];
+                         sessionSales = allSales.filter(s => new Date(s.timestamp) >= openTime);
+                         const sessionCashSales = sessionSales.filter(s => s.paymentMethod === 'cash');
+                         totalSessionProfit = sessionCashSales.reduce((sum, s) => sum + (s.totalProfit || 0), 0);
+                         startY = 45;
+                     } else if (sessionOnly && !storeConfig.cashIsOpen) {
+                         showMessage("Info", "La caja está cerrada. Se generará el informe histórico completo.");
+                         sessionOnly = false;
+                         reportTitle = 'Informe Histórico Completo de Movimientos de Caja'; filenamePrefix = 'Informe_Caja_Completo_Historico';
+                     }
+                 } else {
+                     reportTitle = 'Informe de Movimientos de Caja (Filtrado)'; filenamePrefix = 'Informe_Caja_Filtrado'; sessionOnly = false;
+                 }
+
+                 movements.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+                 const head = [['Fecha', 'Tipo', 'Descripción', `Monto (${storeConfig.currencySymbol})`, `Saldo (${storeConfig.currencySymbol})`]]; const body = []; let balance = initialAmount;
+                 if (sessionOnly) { body.push([ new Date(storeConfig.cashOpenTimestamp).toLocaleString(), 'Apertura', 'Monto Inicial', { content: '+' + initialAmount.toFixed(2), styles: { halign: 'right', fontStyle: 'italic' } }, { content: balance.toFixed(2), styles: { halign: 'right', fontStyle: 'italic' } } ]); }
+                 movements.forEach(mov => { const amount = mov.amount || 0; const type = mov.type === 'in' ? 'Entrada' : 'Salida'; if (!sessionOnly && body.length === 0 && !preFilteredMovements) { balance = (mov.type === 'in' ? amount : -amount); } else { balance += (mov.type === 'in' ? amount : -amount); } body.push([ new Date(mov.timestamp).toLocaleString(), type, mov.description || '-', { content: (mov.type === 'in' ? '+' : '-') + amount.toFixed(2), styles: { halign: 'right' } }, { content: balance.toFixed(2), styles: { halign: 'right' } } ]); });
+
+                 doc.setFontSize(16); doc.text(reportTitle, doc.internal.pageSize.getWidth() / 2, 15, { align: 'center' });
+                 doc.setFontSize(10); doc.text(`Generado el: ${new Date().toLocaleString()}`, 15, 22); doc.text(`Comercio: ${storeConfig.storeName || '?'}`, 15, 28);
+                 if (sessionOnly) { doc.text(`Sesión iniciada: ${new Date(storeConfig.cashOpenTimestamp).toLocaleString()}`, 15, 34); }
+
+                 doc.autoTable({ head: head, body: body, startY: startY, theme: 'grid', headStyles: { fillColor: [22, 160, 133] }, styles: { fontSize: 9, cellPadding: 2 } });
+                 let finalY = doc.lastAutoTable.finalY + 10;
+
+                 if (sessionOnly) {
+                     const cashSalesTotal = sessionSales.filter(s => s.paymentMethod === 'cash').reduce((sum, s) => sum + s.total, 0);
+                     const cashInTotal = movements.filter(m => m.type === 'in' && !m.description.startsWith('Venta #')).reduce((sum, m) => sum + m.amount, 0);
+                     const cashOutTotal = movements.filter(m => m.type === 'out').reduce((sum, m) => sum + m.amount, 0);
+                     const expectedBalance = initialAmount + cashSalesTotal + cashInTotal - cashOutTotal;
+                     doc.setFontSize(10); doc.setFont(undefined, 'bold'); doc.text("Resumen de la Sesión:", 15, finalY); finalY += 6;
+                     doc.setFont(undefined, 'normal');
+                     doc.text(` - Monto Inicial: ${storeConfig.currencySymbol}${initialAmount.toFixed(2)}`, 20, finalY); finalY += 5;
+                     doc.text(` - Ventas en Efectivo: ${storeConfig.currencySymbol}${cashSalesTotal.toFixed(2)}`, 20, finalY); finalY += 5;
+                     doc.text(` - Otras Entradas: ${storeConfig.currencySymbol}${cashInTotal.toFixed(2)}`, 20, finalY); finalY += 5;
+                     doc.text(` - Salidas: ${storeConfig.currencySymbol}${cashOutTotal.toFixed(2)}`, 20, finalY); finalY += 5;
+                     doc.setFont(undefined, 'italic');
+                     doc.text(` - Ganancia Total (Ventas Efectivo): ${storeConfig.currencySymbol}${totalSessionProfit.toFixed(2)}`, 20, finalY); finalY += 5;
+                     doc.setFont(undefined, 'bold'); doc.setFont(undefined, 'normal');
+                     doc.text(` = Saldo Esperado: ${storeConfig.currencySymbol}${expectedBalance.toFixed(2)}`, 20, finalY);
+                     if (Math.abs(balance - expectedBalance) > 0.01) { console.warn("Discrepancia saldo tabla/resumen."); }
+                 } else {
+                     doc.setFontSize(12); doc.setFont(undefined, 'bold'); doc.text(`Saldo Final Calculado: ${storeConfig.currencySymbol}${balance.toFixed(2)}`, 15, finalY);
+                 }
+                 const filename = `${filenamePrefix}_${new Date().toISOString().slice(0, 10)}`;
+                 doc.save(`${filename}.pdf`); console.log(`Informe Caja PDF "${filename}" generado.`);
+             } catch (error) { console.error("Error al generar PDF caja:", error); console.error("Detailed PDF Error:", error.stack || error); showMessage("Error", "No se pudo generar el informe de caja."); }
+         }
+        async function generateCustomerStatementPDF(customerId, transactions) {
+             if (!checkPdfLibraries()) return;
+             if (isNaN(customerId)) { showMessage("Error", "ID de cliente inválido."); return; }
+             if (!transactions) { showMessage("Error", "No hay datos de transacciones para generar PDF."); return;}
+
+             try {
+                 const customer = await getItemById(STORES.CUSTOMERS, customerId);
+                 if (!customer) { showMessage("Error", "Cliente no encontrado para PDF."); return; }
+
+                 const JSPDFClass = window.jspdf && window.jspdf.jsPDF ? window.jspdf.jsPDF : jsPDF;
+                 const doc = new JSPDFClass();
+                 const pageWidth = doc.internal.pageSize.getWidth(); const margin = 15; let cursorY = 20;
+
+                 doc.setFontSize(16); doc.text('Extracto de Cuenta del Cliente', pageWidth / 2, cursorY, { align: 'center' }); cursorY += 10;
+                 doc.setFontSize(12); doc.text(`Cliente: ${customer.name || '?'}`, margin, cursorY); cursorY += 6;
+                 if (customer.phone) { doc.text(`Teléfono: ${customer.phone}`, margin, cursorY); cursorY += 6; }
+                 if (customer.address) { doc.text(`Dirección: ${customer.address}`, margin, cursorY); cursorY += 6; }
+
+                 const startDateStr = document.getElementById('debtDetailsStartDate').value;
+                 const endDateStr = document.getElementById('debtDetailsEndDate').value;
+                 let filterPeriod = "Período: Todas las Transacciones";
+                 if (startDateStr || endDateStr) { filterPeriod = `Período: ${startDateStr || 'Inicio'} a ${endDateStr || 'Hoy'}`; }
+                 doc.setFontSize(10); doc.text(filterPeriod, margin, cursorY); cursorY += 6;
+                 doc.text(`Fecha de generación: ${new Date().toLocaleString()}`, margin, cursorY); cursorY += 10;
+
+                 const head = [['Fecha / Hora', 'Tipo', 'Descripción', `Monto (${storeConfig.currencySymbol})`]];
+                 const body = transactions
+                    .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp))
+                    .map(tx => {
+                        const amount = tx.amount || 0; let displayAmount = ''; let amountStyle = { halign: 'right' };
+                        if (tx.type === 'Pago') { displayAmount = `-${storeConfig.currencySymbol}${Math.abs(amount).toFixed(2)}`; amountStyle.textColor = [0, 128, 0]; }
+                        else if (tx.type === 'Venta Fiado') { displayAmount = `+${storeConfig.currencySymbol}${Math.abs(amount).toFixed(2)}`; amountStyle.textColor = [255, 0, 0]; }
+                        else if (tx.type === 'Venta Contado') { displayAmount = `+${storeConfig.currencySymbol}${Math.abs(amount).toFixed(2)}`; amountStyle.textColor = [0, 0, 255]; }
+                        else { displayAmount = `${storeConfig.currencySymbol}${amount.toFixed(2)}`; }
+                        return [ new Date(tx.timestamp).toLocaleString(), tx.type, tx.description || '?', { content: displayAmount, styles: amountStyle } ];
+                 });
+
+                 if (body.length > 0) {
+                    doc.autoTable({
+                        head: head, body: body, startY: cursorY, theme: 'grid', headStyles: { fillColor: [255, 165, 0] },
+                        styles: { fontSize: 9, cellPadding: 2 }, columnStyles: { 3: { halign: 'right' } }
+                    });
+                    cursorY = doc.lastAutoTable.finalY + 10;
+                 } else {
+                    doc.text("Ninguna transacción encontrada para el período seleccionado.", margin, cursorY); cursorY += 10;
+                 }
+
+                 let totalFiado = 0; let totalContado = 0; let totalPago = 0;
+                 transactions.forEach(tx => {
+                     if (tx.type === 'Venta Fiado') totalFiado += tx.amount;
+                     else if (tx.type === 'Venta Contado') totalContado += tx.amount;
+                     else if (tx.type === 'Pago') totalPago += Math.abs(tx.amount);
+                 });
+
+                 doc.setFontSize(10); doc.setFont(undefined, 'normal');
+                 doc.text(`Total Comprado Fiado (Período): ${storeConfig.currencySymbol}${totalFiado.toFixed(2)}`, margin, cursorY); cursorY += 6;
+                 doc.text(`Total Comprado Contado (Período): ${storeConfig.currencySymbol}${totalContado.toFixed(2)}`, margin, cursorY); cursorY += 6;
+                 doc.text(`Total Pagado (Período): ${storeConfig.currencySymbol}${totalPago.toFixed(2)}`, margin, cursorY); cursorY += 8;
+
+                 doc.setFontSize(12); doc.setFont(undefined, 'bold');
+                 doc.text(`Saldo Deudor Actual (Total): ${storeConfig.currencySymbol}${(customer.creditBalance || 0).toFixed(2)}`, margin, cursorY);
+
+                 const filename = `Extracto_Cuenta_${(customer.name || 'Cliente').replace(/\s+/g, '_')}_${new Date().toISOString().slice(0, 10)}`;
+                 doc.save(`${filename}.pdf`);
+                 console.log(`Extracto cuenta PDF "${filename}" generado.`);
+
+             } catch (error) {
+                 console.error("Error al generar extracto de cuenta PDF:", error);
+                 console.error("Detailed PDF Error:", error.stack || error);
+                 showMessage("Error", "No se pudo generar el extracto de cuenta en PDF.");
+             }
+         }
+
+        // ----- MODIFICACIÓN INICIO: Añadir totales a generateSalesHistoryPDF -----
+        function generateSalesHistoryPDF(salesData, customerMap) {
+             if (!checkPdfLibraries()) return;
+             if (!salesData || salesData.length === 0) { showMessage("Info", "No hay historial de ventas para PDF."); return; }
+             try {
+                 const JSPDFClass = window.jspdf && window.jspdf.jsPDF ? window.jspdf.jsPDF : jsPDF;
+                 const doc = new JSPDFClass();
+
+                 // Calcular totales
+                 let totalSalesAmount = 0;
+                 let totalProfitAmount = 0;
+                 salesData.forEach(sale => {
+                     totalSalesAmount += (sale.total || 0);
+                     totalProfitAmount += (sale.totalProfit || 0);
+                 });
+
+                 const head = [['ID', 'Fecha', 'Cliente', 'Items', `Total (${storeConfig.currencySymbol})`, `Ganancia (${storeConfig.currencySymbol})`, 'Pago']];
+                 const body = salesData.map(sale => {
+                     const custName = sale.customerId ? (customerMap[sale.customerId] || `ID ${sale.customerId}`) : 'N/A';
+                     const itemsSum = (sale.items || []).map(i => `${i.quantity || 0}x ${i.name || '?'}`).join(', ');
+                     const payM = sale.paymentMethod === 'cash' ? 'Efectivo' : 'Crédito';
+                     const profit = sale.totalProfit || 0;
+                     return [
+                         sale.id,
+                         new Date(sale.timestamp).toLocaleString(),
+                         custName,
+                         itemsSum,
+                         { content: (sale.total || 0).toFixed(2), styles: { halign: 'right' } },
+                         { content: profit.toFixed(2), styles: { halign: 'right', fontStyle: profit >= 0 ? 'normal' : 'bold', textColor: profit >= 0 ? [0,0,0] : [255, 0, 0] } },
+                         payM
+                     ];
+                 });
+
+                 // Crear fila de pie de página con los totales
+                 const foot = [[
+                     { content: 'TOTALES:', colSpan: 4, styles: { halign: 'right', fontStyle: 'bold'} },
+                     { content: totalSalesAmount.toFixed(2), styles: { halign: 'right', fontStyle: 'bold' } },
+                     { content: totalProfitAmount.toFixed(2), styles: { halign: 'right', fontStyle: 'bold', textColor: totalProfitAmount >= 0 ? [0,0,0] : [255, 0, 0] } },
+                     { content: '', styles: {} } // Celda vacía para la columna 'Pago'
+                 ]];
+
+                 doc.setFontSize(16); doc.text('Historial de Ventas', doc.internal.pageSize.getWidth() / 2, 15, { align: 'center' });
+                 doc.setFontSize(10); doc.text(`Generado el: ${new Date().toLocaleString()}`, 15, 22); doc.text(`Comercio: ${storeConfig.storeName || '?'}`, 15, 28);
+
+                 doc.autoTable({
+                     head: head,
+                     body: body,
+                     foot: foot, // Añadir la fila de pie de página
+                     startY: 35,
+                     theme: 'grid',
+                     headStyles: { fillColor: [128, 0, 128] },
+                     footStyles: { fillColor: [230, 230, 230], textColor: [0, 0, 0], fontStyle: 'bold' }, // Estilos para el pie de página
+                     styles: { fontSize: 8, cellPadding: 2 },
+                     columnStyles: {
+                         3: { cellWidth: 'auto' }, // Items
+                         4: { halign: 'right'}, // Total
+                         5: { halign: 'right'}  // Ganancia
+                     }
+                 });
+
+                 const filename = `Historial_Ventas_${new Date().toISOString().slice(0, 10)}`;
+                 doc.save(`${filename}.pdf`);
+                 console.log(`Historial Ventas PDF "${filename}" generado con totales.`);
+             } catch(error) {
+                 console.error("Error al generar PDF historial ventas:", error);
+                 console.error("Detailed PDF Error:", error.stack || error);
+                 showMessage("Error", "No se pudo generar PDF historial ventas.");
+             }
+         }
+        // ----- MODIFICACIÓN FIN -----
+
+        // --- Funciones de Navegación y UI ---
+        function showSection(sectionId) {
+            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+             const activeSection = document.getElementById(sectionId);
+            if (activeSection) { activeSection.classList.add('active'); if (sectionId !== 'historial') { const historyArea = document.getElementById('historyDisplayArea'); if (historyArea) { historyArea.innerHTML = '<div id="historyContent" class="overflow-x-auto mt-4"></div>'; } else { console.warn("#historyDisplayArea no encontrado al limpiar."); } }
+                switch(sectionId) { case 'venta': renderCart(); loadProductListForSearch(); loadCustomerOptions(); updateCashUI(); break; case 'inventario': renderInventoryTable(); break; case 'clientes': renderCustomerTable(); break; case 'historial': const historyContent = document.getElementById('historyContent'); if(historyContent) historyContent.innerHTML = '<p class="text-gray-500">Seleccione un historial para ver (Ventas o Caja).</p>'; break; case 'caja': updateCashBalance(); renderCashMovementsTable(null, null); updateCashUI(); break; case 'configuracion': updateUIConfig(); break; }
+            } else { console.warn(`Sección "${sectionId}" no encontrada. Mostrando 'venta'.`); document.getElementById('venta').classList.add('active'); }
+            document.querySelectorAll('.nav-button').forEach(b => { b.classList.toggle('ring-2', b.dataset.section === sectionId); b.classList.toggle('ring-offset-2', b.dataset.section === sectionId); b.classList.toggle('ring-blue-300', b.dataset.section === sectionId); });
+         }
+        function openModal(modalId) {
+            const modal = document.getElementById(modalId);
+             if (modal) { modal.style.display = 'flex'; const form = modal.querySelector('form'); if (form && modalId !== 'closeCashModal' && modalId !== 'debtDetailsModal') { const idInput = form.querySelector('input[type=hidden]'); if (!idInput || !idInput.value) { form.reset(); } } if (modalId === 'productModal' && !document.getElementById('productId').value) { document.getElementById('productModalTitle').textContent = 'Agregar Producto'; } if (modalId === 'customerModal' && !document.getElementById('customerId').value) { document.getElementById('customerModalTitle').textContent = 'Agregar Cliente'; } } else { console.error(`Modal con ID "${modalId}" no encontrado.`); showMessage("Error", `Elemento modal no encontrado: ${modalId}`); }
+        }
+        function closeModal(modalId) {
+            const modal = document.getElementById(modalId);
+             if (modal) { modal.style.display = 'none'; } if (modalId === 'productModal') document.getElementById('productId').value = '';
+             if (modalId === 'customerModal') document.getElementById('customerId').value = ''; if (modalId === 'paymentModal') document.getElementById('paymentCustomerId').value = '';
+             if (modalId === 'debtDetailsModal') {
+                 currentCustomerTransactions = []; currentViewingCustomerId = null;
+                 document.getElementById('debtDetailsTableBody').innerHTML = '';
+                 document.getElementById('debtDetailsStartDate').value = ''; document.getElementById('debtDetailsEndDate').value = '';
+             }
+         }
+        function showMessage(title, text) {
+             document.getElementById('messageModalTitle').textContent = title;
+             document.getElementById('messageModalText').textContent = text; openModal('messageModal');
+         }
+
+
+        // --- Event Listeners ---
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                await initDB();
+                console.log("initDB finalizado con éxito.");
+                console.log("DOMContentLoaded: Anexando listeners...");
+
+                // Navegación principal
+                document.querySelectorAll('.nav-button').forEach(button => { button.addEventListener('click', () => showSection(button.dataset.section)); });
+
+                // Sección Venta
+                document.getElementById('addProductManualButton').addEventListener('click', () => { const searchInput = document.getElementById('productSearch'); const selectedOption = document.querySelector(`#productList option[value="${searchInput.value}"]`); if (selectedOption && selectedOption.dataset.productId) { findProductByIdAndAddToCart(parseInt(selectedOption.dataset.productId)); } else if (searchInput.value.trim()) { findProductByCodeAndAddToCart(searchInput.value.trim()); } searchInput.value = ''; });
+                document.getElementById('productSearch').addEventListener('keypress', (e) => { if (e.key === 'Enter') { e.preventDefault(); document.getElementById('addProductManualButton').click(); } });
+                document.getElementById('completeSaleCash').addEventListener('click', () => completeSale('cash'));
+                document.getElementById('completeSaleCredit').addEventListener('click', () => completeSale('credit'));
+                document.getElementById('cancelSale').addEventListener('click', cancelSale);
+
+                // Sección Inventario
+                document.getElementById('openAddProductModal').addEventListener('click', () => { document.getElementById('productForm').reset(); document.getElementById('productId').value = ''; document.getElementById('productModalTitle').textContent = "Agregar Producto"; openModal('productModal'); });
+                document.getElementById('productForm').addEventListener('submit', addOrUpdateProduct);
+                document.getElementById('inventoryFilter').addEventListener('input', (e) => renderInventoryTable(e.target.value));
+
+                // Sección Clientes
+                document.getElementById('openAddCustomerModal').addEventListener('click', () => { document.getElementById('customerForm').reset(); document.getElementById('customerId').value = ''; document.getElementById('customerModalTitle').textContent = "Agregar Cliente"; openModal('customerModal'); });
+                document.getElementById('customerForm').addEventListener('submit', addOrUpdateCustomer);
+                document.getElementById('customerFilter').addEventListener('input', (e) => renderCustomerTable(e.target.value));
+                document.getElementById('paymentForm').addEventListener('submit', processCustomerPayment);
+                document.getElementById('filterDebtDetailsButton').addEventListener('click', filterAndRenderDebtDetails);
+                document.getElementById('clearDebtDetailsFilterButton').addEventListener('click', clearDebtDetailsFilter);
+
+
+                // Sección Historial
+                document.getElementById('viewSalesHistory').addEventListener('click', () => renderSalesHistory());
+                document.getElementById('viewCashHistory').addEventListener('click', () => renderCashHistory());
+
+                // Sección Caja
+                document.getElementById('openCashRegisterButton').addEventListener('click', openCashRegister);
+                document.getElementById('closeCashRegisterButton').addEventListener('click', closeCashRegister);
+                document.getElementById('openCashForm').addEventListener('submit', processOpenCash);
+                document.getElementById('confirmCloseCashButton').addEventListener('click', processCloseCash);
+                document.getElementById('addCashIn').addEventListener('click', () => { const amount = parseFloat(document.getElementById('cashAmount').value); const description = document.getElementById('cashDescription').value.trim(); addCashMovement('in', amount, description); });
+                document.getElementById('addCashOut').addEventListener('click', () => { const amount = parseFloat(document.getElementById('cashAmount').value); const description = document.getElementById('cashDescription').value.trim(); addCashMovement('out', amount, description); });
+                document.getElementById('generateCashReportPDF').addEventListener('click', () => generateCashReportPDF(true));
+                document.getElementById('filterCashButton').addEventListener('click', () => { const startDate = document.getElementById('cashFilterStartDate').value; const endDate = document.getElementById('cashFilterEndDate').value; renderCashMovementsTable(startDate || null, endDate || null); });
+                document.getElementById('clearCashFilterButton').addEventListener('click', () => { document.getElementById('cashFilterStartDate').value = ''; document.getElementById('cashFilterEndDate').value = ''; renderCashMovementsTable(null, null); });
+
+                // Sección Configuración
+                document.getElementById('saveSettings').addEventListener('click', () => saveConfig(true));
+                document.getElementById('exportData').addEventListener('click', exportData);
+                document.getElementById('importData').addEventListener('click', importData);
+                document.getElementById('clearData').addEventListener('click', clearAllData);
+
+                console.log("DOMContentLoaded: Todos los listeners principales anexados.");
+                showSection('venta'); // Mostrar sección inicial
+            } catch (error) { console.error("Error fatal en la inicialización:", error); document.body.innerHTML = `<div class="p-4 text-red-700 bg-red-100 border border-red-400 rounded">Error crítico al iniciar la aplicación: ${error}. Verifique la consola.</div>`; }
+        });
+
+         window.onclick = function(event) {
+             document.querySelectorAll('.modal').forEach(modal => { if (event.target == modal) { closeModal(modal.id); } }); // Cerrar modal al hacer clic fuera
+         }
+
+         // --- Funciones auxiliares ---
+         async function findProductByIdAndAddToCart(productId) {
+            try {
+                const product = await getItemById(STORES.PRODUCTS, productId);
+                 if (product) { addToCart(product); }
+                 else { showMessage("Aviso", `Producto con ID ${productId} no encontrado.`); }
+            } catch (error) { console.error("Error al buscar producto por ID:", error); showMessage("Error", "Error al buscar producto."); }
+        }
+         async function findProductByCodeAndAddToCart(code) {
+            try {
+                const product = await getItemByIndex(STORES.PRODUCTS, 'code', code);
+                 if (product) { addToCart(product); }
+                 else { showMessage("Aviso", `Producto con código "${code}" no encontrado.`); }
+            } catch (error) { console.error("Error al buscar producto por código:", error); showMessage("Error", "Error al buscar producto."); }
+        }
+
+    </script>
+</body>
+</html>
